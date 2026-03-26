@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = '>= 2.4.5'
 
   spec.add_dependency 'rails', '~> 5.2.8'
-  spec.add_dependency 'mysql2', '~> 0.5.4'
+  spec.add_dependency 'mysql2', '= 0.5.3'
   spec.add_dependency 'puma', '~> 4.3'
   spec.add_dependency 'bcrypt', '~> 3.1'
   spec.add_dependency 'rack-cors'

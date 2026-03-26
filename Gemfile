@@ -1,7 +1,7 @@
 source 'https://rubygems.org'
 
 gem 'rails', '~> 5.2.8'
-gem 'mysql2', '~> 0.5.4'
+gem 'mysql2', '= 0.5.3'
 gem 'puma', '~> 4.3'
 gem 'bcrypt', '~> 3.1'
 gem 'rack-cors'
