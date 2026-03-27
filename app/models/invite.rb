@@ -1,4 +1,6 @@
 class Invite < ApplicationRecord
+  self.table_name = 'bid_collection_invites'
+
   belongs_to :bid_package
   has_one :bid, dependent: :destroy
   has_many :bid_submission_versions, through: :bid

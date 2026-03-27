@@ -82,7 +82,7 @@ ActiveRecord::Schema[5.2].define(version: 2026_03_04_175602) do
   end
 
   create_table "bids", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.bigint "invite_id", null: false
+    t.integer "invite_id", null: false
     t.integer "state", default: 0, null: false
     t.datetime "submitted_at"
     t.datetime "created_at", null: false
@@ -100,7 +100,7 @@ ActiveRecord::Schema[5.2].define(version: 2026_03_04_175602) do
     t.index ["state"], name: "index_bids_on_state"
   end
 
-  create_table "invites", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+  create_table "bid_collection_invites", id: :integer, charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.string "dealer_name", null: false
     t.string "dealer_email"
@@ -111,16 +111,16 @@ ActiveRecord::Schema[5.2].define(version: 2026_03_04_175602) do
     t.datetime "updated_at", null: false
     t.string "password_plaintext"
     t.boolean "disabled", default: false, null: false
-    t.index ["bid_package_id", "dealer_name"], name: "index_invites_on_bid_package_id_and_dealer_name"
-    t.index ["bid_package_id"], name: "index_invites_on_bid_package_id"
-    t.index ["disabled"], name: "index_invites_on_disabled"
-    t.index ["token"], name: "index_invites_on_token", unique: true
+    t.index ["bid_package_id", "dealer_name"], name: "index_bid_collection_invites_on_bid_package_id_and_dealer_name"
+    t.index ["bid_package_id"], name: "index_bid_collection_invites_on_bid_package_id"
+    t.index ["disabled"], name: "index_bid_collection_invites_on_disabled"
+    t.index ["token"], name: "index_bid_collection_invites_on_token", unique: true
   end
 
   create_table "post_award_uploads", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.bigint "spec_item_id"
-    t.bigint "invite_id"
+    t.integer "invite_id"
     t.integer "uploader_role", default: 0, null: false
     t.string "file_name", null: false
     t.text "note"
@@ -199,10 +199,10 @@ ActiveRecord::Schema[5.2].define(version: 2026_03_04_175602) do
   add_foreign_key "bid_packages", "bids", column: "awarded_bid_id"
   add_foreign_key "bid_packages", "projects"
   add_foreign_key "bid_submission_versions", "bids"
-  add_foreign_key "bids", "invites"
-  add_foreign_key "invites", "bid_packages"
+  add_foreign_key "bids", "bid_collection_invites"
+  add_foreign_key "bid_collection_invites", "bid_packages"
   add_foreign_key "post_award_uploads", "bid_packages"
-  add_foreign_key "post_award_uploads", "invites"
+  add_foreign_key "post_award_uploads", "bid_collection_invites"
   add_foreign_key "post_award_uploads", "spec_items"
   add_foreign_key "spec_item_requirement_approvals", "bid_packages"
   add_foreign_key "spec_item_requirement_approvals", "bids"

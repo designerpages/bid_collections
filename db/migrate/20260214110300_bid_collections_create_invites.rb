@@ -1,8 +1,8 @@
 class BidCollectionsCreateInvites < ActiveRecord::Migration[5.2]
   def change
-    return if table_exists?(:invites)
+    return if table_exists?(:bid_collection_invites)
 
-    create_table :invites, id: :integer do |t|
+    create_table :bid_collection_invites, id: :integer do |t|
       t.references :bid_package, null: false, foreign_key: true
       t.string :dealer_name, null: false
       t.string :dealer_email
@@ -13,7 +13,7 @@ class BidCollectionsCreateInvites < ActiveRecord::Migration[5.2]
       t.timestamps
     end
 
-    add_index :invites, :token, unique: true
-    add_index :invites, [:bid_package_id, :dealer_name]
+    add_index :bid_collection_invites, :token, unique: true
+    add_index :bid_collection_invites, [:bid_package_id, :dealer_name]
   end
 end
