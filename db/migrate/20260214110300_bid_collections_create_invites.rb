@@ -2,7 +2,7 @@ class BidCollectionsCreateInvites < ActiveRecord::Migration[5.2]
   def change
     return if table_exists?(:invites)
 
-    create_table :invites do |t|
+    create_table :invites, id: :integer do |t|
       t.references :bid_package, null: false, foreign_key: true
       t.string :dealer_name, null: false
       t.string :dealer_email
