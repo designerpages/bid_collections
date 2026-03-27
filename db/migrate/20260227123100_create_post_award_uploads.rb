@@ -1,4 +1,4 @@
-class CreatePostAwardUploads < ActiveRecord::Migration[5.2]
+class BidCollectionsCreatePostAwardUploads < ActiveRecord::Migration[5.2]
   def change
     create_table :post_award_uploads do |t|
       t.references :bid_package, null: false, foreign_key: true

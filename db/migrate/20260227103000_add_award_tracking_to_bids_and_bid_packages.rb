@@ -1,4 +1,4 @@
-class AddAwardTrackingToBidsAndBidPackages < ActiveRecord::Migration[5.2]
+class BidCollectionsAddAwardTrackingToBidsAndBidPackages < ActiveRecord::Migration[5.2]
   def change
     add_column :bids, :selection_status, :integer, null: false, default: 0
     add_index :bids, :selection_status

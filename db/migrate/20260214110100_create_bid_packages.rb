@@ -1,4 +1,4 @@
-class CreateBidPackages < ActiveRecord::Migration[5.2]
+class BidCollectionsCreateBidPackages < ActiveRecord::Migration[5.2]
   def change
     create_table :bid_packages do |t|
       t.references :project, null: false, foreign_key: true

@@ -1,4 +1,4 @@
-class AddStatusAndNeedsFixTrackingToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
+class BidCollectionsAddStatusAndNeedsFixTrackingToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
   def up
     add_column :spec_item_requirement_approvals, :status, :integer, null: false, default: 0
     add_column :spec_item_requirement_approvals, :needs_fix_dates, :json

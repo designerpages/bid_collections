@@ -1,4 +1,4 @@
-class AddSubstitutionFieldsToBidLineItems < ActiveRecord::Migration[5.2]
+class BidCollectionsAddSubstitutionFieldsToBidLineItems < ActiveRecord::Migration[5.2]
   def change
     add_column :bid_line_items, :is_substitution, :boolean, null: false, default: false
     add_column :bid_line_items, :substitution_product_name, :string

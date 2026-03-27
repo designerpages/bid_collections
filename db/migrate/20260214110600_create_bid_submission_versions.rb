@@ -1,4 +1,4 @@
-class CreateBidSubmissionVersions < ActiveRecord::Migration[5.2]
+class BidCollectionsCreateBidSubmissionVersions < ActiveRecord::Migration[5.2]
   def change
     postgres = connection.adapter_name.downcase.include?('postgres')
     snapshot_column_type = postgres ? :jsonb : :json

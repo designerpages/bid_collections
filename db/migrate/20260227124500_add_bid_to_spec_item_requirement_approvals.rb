@@ -1,4 +1,4 @@
-class AddBidToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
+class BidCollectionsAddBidToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
   def change
     add_reference :spec_item_requirement_approvals, :bid, null: true, foreign_key: true
 

@@ -1,4 +1,4 @@
-class AddActionHistoryToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
+class BidCollectionsAddActionHistoryToSpecItemRequirementApprovals < ActiveRecord::Migration[5.2]
   def up
     add_column :spec_item_requirement_approvals, :action_history, :json
 

@@ -1,4 +1,4 @@
-class CreateProjects < ActiveRecord::Migration[5.2]
+class BidCollectionsCreateProjects < ActiveRecord::Migration[5.2]
   def change
     return if table_exists?(:projects)
 

@@ -1,4 +1,4 @@
-class CreateSpecItems < ActiveRecord::Migration[5.2]
+class BidCollectionsCreateSpecItems < ActiveRecord::Migration[5.2]
   def change
     create_table :spec_items do |t|
       t.references :bid_package, null: false, foreign_key: true

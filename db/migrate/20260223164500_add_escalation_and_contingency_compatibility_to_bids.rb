@@ -1,4 +1,4 @@
-class AddEscalationAndContingencyCompatibilityToBids < ActiveRecord::Migration[5.2]
+class BidCollectionsAddEscalationAndContingencyCompatibilityToBids < ActiveRecord::Migration[5.2]
   def up
     if column_exists?(:bids, :price_increase_amount) && !column_exists?(:bids, :escalation_amount)
       rename_column :bids, :price_increase_amount, :escalation_amount
