@@ -11,6 +11,13 @@ const GENERAL_PRICING_FIELDS = [
   { key: 'sales_tax_amount', label: 'Sales Tax' }
 ]
 
+function createQuestionDraft() {
+  return {
+    id: `question_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    label: ''
+  }
+}
+
 function formatCreatedDate(value) {
   if (!value) return '—'
   const date = new Date(value)
@@ -19,8 +26,9 @@ function formatCreatedDate(value) {
 }
 
 function packageStatusLabel(pkg) {
-  if (pkg?.awarded_bid_id) return 'Approvals'
-  return 'Bidding'
+  if (pkg?.package_award_status === 'fully_awarded') return 'Fully Awarded'
+  if (pkg?.package_award_status === 'partially_awarded') return 'Partially Awarded'
+  return 'Not Awarded'
 }
 
 function packageDisplayName(pkg) {
@@ -47,6 +55,10 @@ function EyeOffGlyph() {
   )
 }
 
+function packageStatusTone(pkg) {
+  return pkg?.package_award_status === 'not_awarded' ? 'is-progress' : 'is-awarded'
+}
+
 export default function PackageListPage() {
   const navigate = useNavigate()
   const [packages, setPackages] = useState([])
@@ -58,7 +70,8 @@ export default function PackageListPage() {
     name: '',
     visibility: 'private',
     instructions: '',
-    activeGeneralFields: GENERAL_PRICING_FIELDS.map((f) => f.key)
+    activeGeneralFields: GENERAL_PRICING_FIELDS.map((f) => f.key),
+    customQuestions: []
   })
 
   const loadPackages = async () => {
@@ -84,7 +97,8 @@ export default function PackageListPage() {
       name: pkg.name || '',
       visibility: pkg.visibility || 'private',
       instructions: pkg.instructions || '',
-      activeGeneralFields: pkg.active_general_fields || GENERAL_PRICING_FIELDS.map((f) => f.key)
+      activeGeneralFields: pkg.active_general_fields || GENERAL_PRICING_FIELDS.map((f) => f.key),
+      customQuestions: pkg.custom_questions || []
     })
   }
 
@@ -98,7 +112,8 @@ export default function PackageListPage() {
         name: draft.name.trim(),
         visibility: draft.visibility,
         instructions: draft.instructions,
-        activeGeneralFields: draft.activeGeneralFields
+        activeGeneralFields: draft.activeGeneralFields,
+        customQuestions: (draft.customQuestions || []).filter((question) => String(question.label || '').trim())
       })
       setEditingId(null)
       await loadPackages()
@@ -151,8 +166,8 @@ export default function PackageListPage() {
               <div className="package-list-card-row">
                 <div className="package-list-left">
                   <div className="package-list-card-meta">
-                    <span className={`package-status-dot ${pkg.awarded_bid_id ? 'is-awarded' : 'is-progress'}`} />
-                    <span className={`package-status-label ${pkg.awarded_bid_id ? 'is-awarded' : 'is-progress'}`}>{packageStatusLabel(pkg)}</span>
+                    <span className={`package-status-dot ${packageStatusTone(pkg)}`} />
+                    <span className={`package-status-label ${packageStatusTone(pkg)}`}>{packageStatusLabel(pkg)}</span>
                   </div>
                   <div className="package-list-title-wrap">
                     {pkg.visibility === 'public' ? (
@@ -215,7 +230,11 @@ export default function PackageListPage() {
                   </label>
                   <label className="package-list-edit-span">
                     Instructions
-                    <input value={draft.instructions} onChange={(event) => setDraft((prev) => ({ ...prev, instructions: event.target.value }))} />
+                    <textarea
+                      value={draft.instructions}
+                      rows={2}
+                      onChange={(event) => setDraft((prev) => ({ ...prev, instructions: event.target.value }))}
+                    />
                   </label>
                   <div className="package-list-general-fields package-list-edit-span">
                     <p>General Pricing Fields</p>
@@ -243,8 +262,60 @@ export default function PackageListPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="package-list-general-fields package-list-edit-span">
+                    <div className="package-list-custom-head">
+                      <p>Custom Questions</p>
+                    </div>
+                    {!(draft.customQuestions || []).length ? null : (
+                      <div className="package-questions-editor">
+                        {(draft.customQuestions || []).map((question, index) => (
+                          <div key={question.id || index} className="package-question-editor-row">
+                            <span className="package-question-editor-index">{index + 1}</span>
+                            <input
+                              type="text"
+                              value={question.label || ''}
+                              placeholder="What purchasing network are you utilizing?"
+                              onChange={(event) => setDraft((prev) => ({
+                                ...prev,
+                                customQuestions: (prev.customQuestions || []).map((entry, entryIndex) => (
+                                  (entry.id || entryIndex) === (question.id || index)
+                                    ? { ...entry, label: event.target.value }
+                                    : entry
+                                ))
+                              }))}
+                            />
+                            <button
+                              type="button"
+                              className="package-question-editor-remove"
+                              onClick={() => setDraft((prev) => ({
+                                ...prev,
+                                customQuestions: (prev.customQuestions || []).filter((entry, entryIndex) => (
+                                  (entry.id || entryIndex) !== (question.id || index)
+                                ))
+                              }))}
+                              disabled={loading}
+                              aria-label={`Remove question ${index + 1}`}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="package-question-add-link"
+                      onClick={() => setDraft((prev) => ({
+                        ...prev,
+                        customQuestions: [...(prev.customQuestions || []), createQuestionDraft()]
+                      }))}
+                      disabled={loading}
+                    >
+                      + Add Question
+                    </button>
+                  </div>
                   <div className="action-row package-list-edit-actions">
-                    <button className="btn btn-primary" onClick={saveEdit} disabled={loading || !draft.name.trim()}>Save</button>
+                    <button className="btn btn-primary" onClick={saveEdit} disabled={loading || !draft.name.trim()}>Save Changes</button>
                     <button className="btn" onClick={() => setEditingId(null)} disabled={loading}>Cancel</button>
                     <button className="btn btn-danger package-list-delete-btn" onClick={() => setDeleteModalPackage(pkg)} disabled={loading}>Delete Bid Package</button>
                   </div>

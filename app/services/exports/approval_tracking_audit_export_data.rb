@@ -25,11 +25,14 @@ module Exports
 
         audit_events_for(approval).map do |event|
           event_time = parse_time_or_nil(event[:at])
+          component_label = approval.component&.label
+          requirement_label = @requirement_labels[approval.requirement_key] || approval.requirement_key
+          requirement_label = "#{requirement_label} (#{component_label})" if component_label.present?
           {
             action_at: event_time,
             code_tag: item.sku,
             product_name: item.product_name,
-            requirement: @requirement_labels[approval.requirement_key] || approval.requirement_key,
+            requirement: requirement_label,
             action: ACTION_LABELS[event[:action].to_s] || event[:action].to_s.humanize
           }
         end

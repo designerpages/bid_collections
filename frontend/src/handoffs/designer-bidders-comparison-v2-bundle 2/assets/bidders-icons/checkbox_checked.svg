@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 10.0039997 10.0039997">
+  <!-- Generator: Adobe Illustrator 30.2.1, SVG Export Plug-In . SVG Version: 2.1.1 Build 1)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #c4c4c4;
+      }
+
+      .st1 {
+        fill: #fff;
+      }
+
+      .st2 {
+        fill: #8d8d8d;
+      }
+    </style>
+  </defs>
+  <g id="Group_1219">
+    <g id="Rectangle_2873">
+      <rect class="st1" y="-.000061" width="10.0039997" height="10.0039997" rx="2" ry="2"/>
+      <path class="st0" d="M8.0039062,10.0040894H2c-1.1030273,0-2-.8974609-2-2V2.0001831C0,.8971558.8969727.0001831,2,.0001831h6.0039062C9.1064453.0001831,10.0039062.8971558,10.0039062,2.0001831v6.0039062c0,1.1025391-.8974609,2-2,2ZM2,1.0001831c-.5512695,0-1,.4487305-1,1v6.0039062c0,.5517578.4487305,1,1,1h6.0039062c.5517578,0,1-.4482422,1-1V2.0001831c0-.5512695-.4482422-1-1-1H2Z"/>
+    </g>
+    <g id="Rectangle_2885">
+      <rect class="st2" x="3" y="2.999939" width="4.0040002" height="4.0040002" rx="1" ry="1"/>
+    </g>
+  </g>
+</svg>

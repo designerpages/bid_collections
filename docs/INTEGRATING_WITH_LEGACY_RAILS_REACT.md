@@ -1,7 +1,10 @@
 # Integrating Bid Collections Into a Rails + React App
 
-This document describes two supported integration modes for host projects using
-Ruby `2.4.5` and Rails `5.2`.
+This document describes two supported integration modes for host projects that
+need to work with the Bid Collections compatibility targets:
+
+- Backend target: Ruby `2.4.5`, Rails `5.2.8.x`
+- Frontend target: React `17.x`
 
 ## Supported Modes
 
@@ -10,6 +13,19 @@ Ruby `2.4.5` and Rails `5.2`.
 
 Choose service-style for lower operational coupling, or engine mode for a single
 runtime in the host app.
+
+## Compatibility Matrix
+
+- Service-style integration:
+  - Bid Collections backend stays on Ruby `2.4.5` / Rails `5.2.8.x`
+  - Bid Collections frontend stays on React `17.x`
+  - Host app can be on a different backend stack because it proxies to the standalone API
+- Engine integration:
+  - Host app should be treated as Rails `5.2` compatible
+  - Host app should be reviewed for migration and dependency compatibility before mounting the engine
+- Frontend embedding:
+  - Treat the UI package as React `17` compatible
+  - Validate router integration explicitly because the frontend currently uses `react-router-dom` `6.x`
 
 ## A) Service-Style Integration Steps
 
@@ -80,6 +96,7 @@ Bid Collections will sign and forward requests to DP’s `/api/v2/bid_collection
 
 ```bash
 cd frontend
+nvm use
 npm install
 cp .env.example .env
 npm run dev
@@ -112,6 +129,11 @@ Choose one:
 
 - Serve a built static bundle from the host app.
 - Keep Vite dev server separate in development and use host navigation links.
+
+Current frontend assumptions:
+- React `17.x`
+- ReactDOM `17.x`
+- `react-router-dom` `6.x`
 
 The frontend now supports `VITE_API_PREFIX`, so no source-code path rewrites are
 required when moving between standalone and embedded environments.

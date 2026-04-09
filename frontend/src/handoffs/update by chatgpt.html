@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designer Bidders + Comparison Handoff</title>
+  <meta name="description" content="Markup handoff for the Designer Bid Management view (bidders + comparison/approvals)." />
+  <link rel="stylesheet" href="../styles.css" />
+
+  <style>
+    /* Scoped overrides for handoff review */
+    .comparison-visibility-checkbox {
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      display: inline-block !important;
+      width: 14px !important;
+      height: 14px !important;
+      min-width: 14px !important;
+      min-height: 14px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 3px !important;
+      border: 1px solid #cfd6de !important;
+      background-color: #ffffff !important;
+      background-image: none !important;
+      box-shadow: none !important;
+      position: relative;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+
+    .comparison-visibility-checkbox:checked {
+      border-color: #0FBEFF !important;
+      background-color: #0FBEFF !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 4.8 8.5 9.5 3.7' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: center !important;
+      background-size: 9px 9px !important;
+    }
+
+    .comparison-visibility-checkbox:checked::after {
+      content: none !important;
+    }
+
+    .comparison-award-badge.comparison-award-badge-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      height: 22px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: #10cfa1;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0;
+      box-shadow: none;
+      white-space: nowrap;
+    }
+
+    .comparison-award-badge-pill .comparison-award-badge-label {
+      display: inline-block;
+      transform: translateY(-0.5px);
+    }
+  </style>
+
+</head>
+<body>
+  <!--
+    HANDOFF NOTES
+    - Source JSX:
+      - frontend/src/pages/PackageDashboardPage.jsx
+      - frontend/src/pages/ComparisonPage.jsx
+    - Keep class names intact where possible.
+    - You can add/remove/reorder wrappers, buttons, and labels.
+    - Values below are realistic mock data for design review.
+    - Send this file back and I will map your edits into React JSX.
+  -->
+
+  <main class="stack package-dashboard-handoff" data-view="designer-bidders-comparison">
+    <!-- BIDDERS SECTION -->
+    <section class="section-card section-card-flat bidders-flat" data-block="bidders">
+      <div style="max-width: 985px">
+        <div class="bidders-head-row">
+          <h2>Bidders (2)</h2>
+          <div class="bidders-head-actions">
+            <label class="bidders-sort-control">
+              <span class="bidders-sort-label">Sort By</span>
+              <select class="bidders-sort-select" disabled>
+                <option selected>Created</option>
+                <option>Vendor Name</option>
+                <option>Ascending</option>
+                <option>Descending</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <table class="table data-table bidders-table">
+          <thead>
+            <tr>
+              <th style="width: 200px" class="data-table-col-head">Vendor</th>
+              <th style="width: 110px" class="data-table-col-head">Status</th>
+              <th style="width: 110px" class="data-table-col-head">Questions</th>
+              <th style="width: 240px" class="data-table-col-head">Bid Snapshot</th>
+              <th style="width: 160px" class="data-table-col-head">Total</th>
+              <th style="width: 60px; text-align: right" class="data-table-col-head"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="bidder-vendor-cell">
+                <div class="bidder-vendor-topline">
+                  <span class="bidder-controls">
+                    <input type="checkbox" class="comparison-visibility-checkbox" checked />
+                    <button type="button" class="access-dot-btn" style="background: #10b981" title="Click to disable bidder access"></button>
+                  </span>
+                  <span class="bidder-vendor-name">jacob.slevin@gmail.com</span>
+                </div>
+                <div class="bidder-password-line">
+                  <span class="bidder-controls-spacer"></span>
+                  <span class="bidder-password-label">Password:</span>
+                  <button class="btn bidder-password-chip">welcome2</button>
+                  <button class="btn bidder-inline-icon-btn" title="Copy access link">🔗</button>
+                  <button class="btn bidder-inline-icon-btn" title="Email invitation">✉</button>
+                </div>
+              </td>
+              <td class="bidder-status-column">
+                <div class="bidder-status-cell">
+                  <span class="bidder-status-main status-tone-submitted">Submitted</span>
+                  <button type="button" class="bidder-status-action"><span>Re-open</span></button>
+                </div>
+              </td>
+              <td class="bidder-questions-column">
+                <div class="bidder-questions-cell">
+                  <span class="bidder-questions-count">1/1</span>
+                  <button type="button" class="btn bidder-questions-view-btn" aria-label="View bidder question responses">💬</button>
+                </div>
+              </td>
+              <td class="bidder-snapshot-cell">
+                <div class="bidder-progress-track">
+                  <div class="bidder-progress-fill is-complete" style="width: 100%"></div>
+                </div>
+                <div class="bidder-snapshot-meta">
+                  <span class="bidder-snapshot-pill is-complete">100% complete</span>
+                </div>
+                <div class="bidder-snapshot-breakdown">138 BoD • 0 BoD-Sub • 0 Sub</div>
+              </td>
+              <td class="bidder-total-column">
+                <div class="bidder-total-main">$2.5MM</div>
+                <div class="bidder-total-subline">2026-04-06 10:21 am</div>
+              </td>
+              <td class="bidder-delete-cell">
+                <button class="btn bidder-delete-action" title="Remove bidder">✕</button>
+              </td>
+            </tr>
+
+            <tr class="bidder-row-muted">
+              <td class="bidder-vendor-cell">
+                <div class="bidder-vendor-topline">
+                  <span class="bidder-controls">
+                    <input type="checkbox" class="comparison-visibility-checkbox" checked />
+                    <button type="button" class="access-dot-btn" style="background: #ef4444" title="Click to enable bidder access"></button>
+                  </span>
+                  <span class="bidder-vendor-name">laura.bennett@horizoncf.com</span>
+                </div>
+                <div class="bidder-password-line">
+                  <span class="bidder-controls-spacer"></span>
+                  <span class="bidder-password-label">Password:</span>
+                  <button class="btn bidder-password-chip">welcome2</button>
+                </div>
+              </td>
+              <td class="bidder-status-column">
+                <div class="bidder-status-cell">
+                  <span class="bidder-status-main status-tone-warning">In progress</span>
+                </div>
+              </td>
+              <td class="bidder-questions-column"><span class="bidder-questions-empty">—</span></td>
+              <td class="bidder-snapshot-cell"><span class="bidder-snapshot-empty">Not Started</span></td>
+              <td class="bidder-total-column"><div class="bidder-total-main">$397.4K</div></td>
+              <td class="bidder-delete-cell"><button class="btn bidder-delete-action" title="Remove bidder">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="action-row bidders-footer-actions">
+        <button class="btn bidder-add-link-btn"><span>Bidder</span></button>
+      </div>
+    </section>
+
+    <!-- COMPARISON / APPROVALS SECTION -->
+    <section class="section-card comparison-flat" data-block="comparison">
+      <div class="section-head comparison-subheader-wrap">
+        <h2>Line Items (139)</h2>
+        <div class="section-actions">
+          <!-- Optional header action -->
+          <!-- <button type="button" class="btn comparison-header-action-btn">Invite Bidders</button> -->
+        </div>
+      </div>
+
+      <div class="table-scroll-top" aria-label="Horizontal scroll control">
+        <div class="comparison-toolbar-left">
+          <button type="button" class="btn comparison-scroll-btn" aria-label="Scroll table left">←</button>
+          <button type="button" class="btn comparison-scroll-btn" aria-label="Scroll table right">→</button>
+          <span class="table-scroll-hint">Drag table left/right</span>
+        </div>
+
+        <div class="comparison-toolbar-right">
+          <div class="comparison-selection-bar-actions comparison-selection-bar-actions-toolbar">
+            <button type="button" class="btn comparison-selection-clear">Clear Selection</button>
+            <button type="button" class="btn comparison-selection-commit">Award Selected Rows</button>
+          </div>
+
+          <div class="actions-menu-wrap">
+            <button type="button" class="btn icon-btn-subtle" title="Actions" aria-label="Actions">…</button>
+          </div>
+
+          <button class="btn btn-primary icon-btn-subtle comparison-fullscreen-btn" type="button" title="Full screen" aria-label="Full screen">⛶</button>
+        </div>
+      </div>
+
+      <div class="comparison-award-toolbar">
+        <div class="comparison-award-toolbar-summary">
+          <span class="comparison-award-progress-label">Award progress: 0 / 138</span>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <div class="comparison-table-inner">
+          <table class="table comparison-table sticky-code-column has-use-column" style="width: 100%; min-width: 1540px">
+            <thead>
+              <tr class="header-top">
+                <th colspan="5" class="dealer-group-spacer-head">
+                  <div class="comparison-header-top-left">
+                    <span class="comparison-award-progress-label">Award progress: 0 / 138</span>
+                  </div>
+                </th>
+                <th colspan="5" class="dealer-group-header dealer-block-start dealer-block-end">
+                  <div class="dealer-group-header-inner">
+                    <div class="dealer-group-header-name">jacob.slevin@gmail.com</div>
+                    <div class="dealer-group-header-actions">
+                      <button type="button" class="btn btn-award-change">Select All</button>
+                    </div>
+                  </div>
+                </th>
+                <th colspan="5" class="dealer-group-header dealer-block-start dealer-block-end">
+                  <div class="dealer-group-header-inner">
+                    <div class="dealer-group-header-name">laura.bennett@horizoncf.com</div>
+                    <div class="dealer-group-header-actions">
+                      <button type="button" class="btn btn-award-change">Select All</button>
+                    </div>
+                  </div>
+                </th>
+              </tr>
+
+              <tr class="header-bottom">
+                <th class="use-col-head">In Totals</th>
+                <th class="code-col-head">Code/Tag</th>
+                <th class="comparison-col-product">Product</th>
+                <th class="comparison-col-brand">Brand</th>
+                <th class="comparison-col-qty">Qty/UOM</th>
+
+                <th class="dealer-metric-header dealer-block-start">Unit Price</th>
+                <th class="dealer-metric-header">Extended</th>
+                <th class="dealer-metric-header">% Avg Delta</th>
+                <th class="dealer-metric-header">% Next Lower</th>
+                <th class="dealer-metric-header dealer-block-end">Award</th>
+
+                <th class="dealer-metric-header dealer-block-start">Unit Price</th>
+                <th class="dealer-metric-header">Extended</th>
+                <th class="dealer-metric-header">% Avg Delta</th>
+                <th class="dealer-metric-header">% Next Lower</th>
+                <th class="dealer-metric-header dealer-block-end">Award</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr>
+                <td class="use-col-cell">
+                  <div class="comparison-use-cell">
+                    <button type="button" class="btn comparison-include-btn" title="Included in totals">
+                      <span class="comparison-include-thumb" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </td>
+                <td class="code-col-cell">
+                  <div class="comparison-code-cell">
+                    <button type="button" class="comparison-active-dot-btn is-active" data-tooltip="Active (visible to bidders) - click to hide" aria-label="Active (visible to bidders) - click to hide"></button>
+                    <span>*CL-1</span>
+                  </div>
+                </td>
+                <td class="comparison-col-product">INTELLECT WAVE</td>
+                <td class="comparison-col-brand">KI</td>
+                <td class="comparison-col-qty">850.0 EA</td>
+
+                <td class="dealer-block-start num comparison-bidder-group-cell">$150.00</td>
+                <td class="num comparison-bidder-group-cell">$127,498.90</td>
+                <td class="num comparison-bidder-group-cell">+4.1%</td>
+                <td class="num comparison-bidder-group-cell">+7.2%</td>
+                <td class="dealer-block-end comparison-award-cell comparison-bidder-group-cell">
+                  <div class="comparison-award-control">
+                    <button type="button" class="comparison-award-radio is-selected" aria-label="Select dealer 1 for row 1">
+                      <span class="comparison-award-radio-dot"></span>
+                    </button>
+                  </div>
+                </td>
+
+                <td class="dealer-block-start num comparison-bidder-group-cell">$143.60</td>
+                <td class="num comparison-bidder-group-cell best">$122,060.00</td>
+                <td class="num comparison-bidder-group-cell">-0.8%</td>
+                <td class="num comparison-bidder-group-cell">+2.1%</td>
+                <td class="dealer-block-end comparison-award-cell comparison-bidder-group-cell">
+                  <div class="comparison-award-control">
+                    <button type="button" class="comparison-award-radio" aria-label="Select dealer 2 for row 1">
+                      <span class="comparison-award-radio-dot"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Example awarded row -->
+              <tr class="comparison-row-awarded">
+                <td class="use-col-cell">
+                  <div class="comparison-use-cell">
+                    <span class="comparison-code-awarded-check comparison-use-awarded-check" title="Awarded" aria-label="Awarded">
+                      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                        <path d="M4 8.2 6.6 10.8 12 5.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                      </svg>
+                    </span>
+                    <button type="button" class="btn comparison-include-btn" title="Included in totals">
+                      <span class="comparison-include-thumb" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </td>
+                <td class="code-col-cell">
+                  <div class="comparison-code-cell">
+                    <button type="button" class="comparison-active-dot-btn is-active" data-tooltip="Active (visible to bidders) - click to hide" aria-label="Active (visible to bidders) - click to hide"></button>
+                    <span>*DSK-1</span>
+                  </div>
+                </td>
+                <td class="comparison-col-product">TEXT</td>
+                <td class="comparison-col-brand">Virco</td>
+                <td class="comparison-col-qty">850.0 EA</td>
+
+                <td class="dealer-block-start num comparison-bidder-group-cell is-awarded">$125.00</td>
+                <td class="num comparison-bidder-group-cell is-awarded">$106,249.07</td>
+                <td class="num comparison-bidder-group-cell is-awarded">—</td>
+                <td class="num comparison-bidder-group-cell is-awarded">—</td>
+                <td class="dealer-block-end comparison-award-cell comparison-bidder-group-cell is-awarded">
+                  <div class="comparison-award-control">
+                    <span class="comparison-award-badge comparison-award-badge-pill"><span class="comparison-award-badge-label">Awarded</span></span>
+                  </div>
+                </td>
+
+                <td class="dealer-block-start num comparison-bidder-group-cell is-dimmed">$132.45</td>
+                <td class="num comparison-bidder-group-cell is-dimmed">$112,582.50</td>
+                <td class="num comparison-bidder-group-cell is-dimmed">—</td>
+                <td class="num comparison-bidder-group-cell is-dimmed">—</td>
+                <td class="dealer-block-end comparison-award-cell comparison-bidder-group-cell is-dimmed">
+                  <div class="comparison-award-control">
+                    <span class="comparison-award-radio comparison-award-radio-disabled" aria-hidden="true"></span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPTIONAL: APPROVAL TRACKING ROW SHAPE (AWARDED WORKSPACE MODE) -->
+    <section class="section-card comparison-flat" data-block="approvals-shape">
+      <h3>Approvals Row Shape (Reference)</h3>
+      <table class="table comparison-table">
+        <thead>
+          <tr class="header-bottom">
+            <th class="use-col-head">In Totals</th>
+            <th class="code-col-head">Code/Tag</th>
+            <th class="comparison-col-product">Product</th>
+            <th class="comparison-col-brand">Brand</th>
+            <th class="comparison-col-qty">Qty/UOM</th>
+            <th class="dealer-metric-header">Awarded</th>
+            <th class="dealer-metric-header">Extended</th>
+            <th class="approval-col-head">Files</th>
+            <th class="approval-col-head">COM Check</th>
+            <th class="approval-col-head">Install DWG</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="use-col-cell"><div class="comparison-use-cell"><button class="btn comparison-include-btn"><span class="comparison-include-thumb"></span></button></div></td>
+            <td class="code-col-cell"><div class="comparison-code-cell"><button class="comparison-active-dot-btn is-active"></button><span class="code-tag-status code-tag-approved">*CL-1</span></div></td>
+            <td class="comparison-col-product">INTELLECT WAVE</td>
+            <td class="comparison-col-brand">KI</td>
+            <td class="comparison-col-qty">850.0 EA</td>
+            <td class="comparison-awarded-summary-cell">jacob.slevin@gmail.com</td>
+            <td class="num comparison-awarded-summary-cell">$127,498.90</td>
+            <td class="approval-cell-files"><button class="btn approval-files-btn has-files">📄 <span>3</span></button></td>
+            <td class="approval-cell-approved"><button class="approval-approved-btn">Approved</button></td>
+            <td class="approval-cell-needs-revision"><div class="approval-needs-fix-wrap">Needs Fix</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

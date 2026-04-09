@@ -8,7 +8,7 @@ module Exports
     def call
       awarded_bid_id = @bid_package.awarded_bid_id
       approvals = @bid_package.spec_item_requirement_approvals.where(bid_id: awarded_bid_id)
-      approvals_by_key = approvals.index_by { |approval| [approval.spec_item_id, approval.requirement_key] }
+      approvals_by_key = approvals.group_by { |approval| [approval.spec_item_id, approval.requirement_key] }
 
       headers = ['Code/Tag', 'Product', 'Brand', 'Qty/UOM'] + @requirement_columns.map { |req| req[:label] }
       rows = @bid_package.spec_items.order(:id).map do |item|
@@ -18,8 +18,8 @@ module Exports
           if requirement_keys.exclude?(req[:key])
             'N/A'
           else
-            approval = approvals_by_key[[item.id, req[:key]]]
-            matrix_status_value(approval)
+            row_approvals = Array(approvals_by_key[[item.id, req[:key]]])
+            matrix_status_value(row_approvals)
           end
         end
 
@@ -31,7 +31,16 @@ module Exports
 
     private
 
-    def matrix_status_value(approval)
+    def matrix_status_value(approvals)
+      rows = Array(approvals)
+      return 'Pending' if rows.empty?
+
+      component_rows = rows.select { |approval| approval.component_id.present? }
+      if component_rows.any?
+        return component_rows.all?(&:approved?) ? 'Approved' : 'Incomplete'
+      end
+
+      approval = rows.find { |entry| entry.component_id.nil? }
       return 'Pending' unless approval.present?
 
       status = if approval.respond_to?(:status)

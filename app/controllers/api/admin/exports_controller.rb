@@ -11,8 +11,11 @@ module Api
         comparison_mode = params[:comparison_mode].to_s.presence || 'average'
         show_product = ActiveModel::Type::Boolean.new.cast(params.fetch(:show_product, true))
         show_brand = ActiveModel::Type::Boolean.new.cast(params.fetch(:show_brand, true))
+        show_unit_price = ActiveModel::Type::Boolean.new.cast(params.fetch(:show_unit_price, true))
         show_lead_time = ActiveModel::Type::Boolean.new.cast(params.fetch(:show_lead_time, false))
         show_notes = ActiveModel::Type::Boolean.new.cast(params.fetch(:show_notes, false))
+        visible_dealer_invite_ids = Array(params[:visible_dealer_invite_ids]).map(&:to_s).reject(&:blank?)
+        column_order = Array(params[:column_order]).map(&:to_s).reject(&:blank?)
 
         if export_type == 'approval_matrix'
           return send_approval_matrix_export(bid_package, requested_format)
@@ -30,8 +33,11 @@ module Api
           comparison_mode: comparison_mode,
           show_product: show_product,
           show_brand: show_brand,
+          show_unit_price: show_unit_price,
           show_lead_time: show_lead_time,
-          show_notes: show_notes
+          show_notes: show_notes,
+          visible_dealer_invite_ids: visible_dealer_invite_ids,
+          column_order: column_order
         )
       end
 
@@ -74,8 +80,11 @@ module Api
         comparison_mode:,
         show_product:,
         show_brand:,
+        show_unit_price:,
         show_lead_time:,
-        show_notes:
+        show_notes:,
+        visible_dealer_invite_ids:,
+        column_order:
       )
         if requested_format == 'xlsx'
           output = Exports::BidPackageComparisonXlsxService.new(
@@ -86,8 +95,11 @@ module Api
             comparison_mode: comparison_mode,
             show_product: show_product,
             show_brand: show_brand,
+            show_unit_price: show_unit_price,
             show_lead_time: show_lead_time,
-            show_notes: show_notes
+            show_notes: show_notes,
+            visible_dealer_invite_ids: visible_dealer_invite_ids,
+            column_order: column_order
           ).call
           send_data output,
                     filename: "bid_package_#{bid_package.id}_comparison.xlsx",
@@ -101,8 +113,11 @@ module Api
             comparison_mode: comparison_mode,
             show_product: show_product,
             show_brand: show_brand,
+            show_unit_price: show_unit_price,
             show_lead_time: show_lead_time,
-            show_notes: show_notes
+            show_notes: show_notes,
+            visible_dealer_invite_ids: visible_dealer_invite_ids,
+            column_order: column_order
           ).call
           send_data output,
                     filename: "bid_package_#{bid_package.id}_comparison.csv",

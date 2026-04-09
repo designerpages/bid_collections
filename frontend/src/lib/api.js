@@ -128,7 +128,8 @@ export async function createBidPackage({
   sourceProfile,
   visibility = 'private',
   activeGeneralFields = [],
-  instructions = ''
+  instructions = '',
+  customQuestions = []
 }) {
   return request(`/api/projects/${projectId}/bid_packages`, {
     method: 'POST',
@@ -139,7 +140,8 @@ export async function createBidPackage({
       source_profile: sourceProfile,
       visibility,
       active_general_fields: activeGeneralFields,
-      instructions
+      instructions,
+      custom_questions: customQuestions
     })
   })
 }
@@ -188,31 +190,68 @@ export async function reactivateSpecItem({ bidPackageId, specItemId }) {
   })
 }
 
-export async function approveSpecItemRequirement({ bidPackageId, specItemId, requirementKey, approvedAt, approvedBy }) {
+export async function approveSpecItemRequirement({ bidPackageId, specItemId, requirementKey, componentId, approvedAt, approvedBy }) {
   return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/requirements/${requirementKey}/approve`, {
     method: 'PATCH',
     body: JSON.stringify({
+      component_id: componentId,
       approved_at: approvedAt,
       approved_by: approvedBy
     })
   })
 }
 
-export async function markSpecItemRequirementNeedsFix({ bidPackageId, specItemId, requirementKey, needsFixAt }) {
+export async function markSpecItemRequirementNeedsFix({ bidPackageId, specItemId, requirementKey, componentId, needsFixAt }) {
   return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/requirements/${requirementKey}/needs_fix`, {
     method: 'PATCH',
     body: JSON.stringify({
+      component_id: componentId,
       needs_fix_at: needsFixAt
     })
   })
 }
 
-export async function unapproveSpecItemRequirement({ bidPackageId, specItemId, requirementKey, actionType }) {
+export async function unapproveSpecItemRequirement({ bidPackageId, specItemId, requirementKey, componentId, actionType }) {
   return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/requirements/${requirementKey}/unapprove`, {
     method: 'PATCH',
     body: JSON.stringify({
+      component_id: componentId,
       action_type: actionType
     })
+  })
+}
+
+export async function createSpecItemApprovalComponent({ bidPackageId, specItemId, label }) {
+  return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/approval_components`, {
+    method: 'POST',
+    body: JSON.stringify({ label })
+  })
+}
+
+export async function updateSpecItemApprovalComponent({ bidPackageId, specItemId, componentId, label }) {
+  return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/approval_components/${componentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label })
+  })
+}
+
+export async function deleteSpecItemApprovalComponent({ bidPackageId, specItemId, componentId }) {
+  return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/approval_components/${componentId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function activateSpecItemComponentRequirement({ bidPackageId, specItemId, componentId, requirementKey }) {
+  return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/approval_components/${componentId}/requirements/${requirementKey}/activate`, {
+    method: 'PATCH',
+    body: JSON.stringify({})
+  })
+}
+
+export async function deactivateSpecItemComponentRequirement({ bidPackageId, specItemId, componentId, requirementKey }) {
+  return request(`/api/bid_packages/${bidPackageId}/spec_items/${specItemId}/approval_components/${componentId}/requirements/${requirementKey}/deactivate`, {
+    method: 'PATCH',
+    body: JSON.stringify({})
   })
 }
 
@@ -223,14 +262,15 @@ export async function clearCurrentAwardApprovals({ bidPackageId }) {
   })
 }
 
-export async function updateBidPackage({ bidPackageId, name, visibility, activeGeneralFields, instructions = '' }) {
+export async function updateBidPackage({ bidPackageId, name, visibility, activeGeneralFields, instructions = '', customQuestions = [] }) {
   return request(`/api/bid_packages/${bidPackageId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       name,
       visibility,
       active_general_fields: activeGeneralFields,
-      instructions
+      instructions,
+      custom_questions: customQuestions
     })
   })
 }
@@ -359,6 +399,18 @@ export async function fetchComparison(
   return request(`/api/bid_packages/${bidPackageId}/comparison${query ? `?${query}` : ''}`)
 }
 
+export async function generateComparisonAnalysis({
+  bidPackageId,
+  deterministic
+}) {
+  return request(`/api/bid_packages/${bidPackageId}/comparison_analysis`, {
+    method: 'POST',
+    body: JSON.stringify({
+      deterministic
+    })
+  })
+}
+
 export async function awardBidPackage({
   bidPackageId,
   bidId,
@@ -377,6 +429,42 @@ export async function awardBidPackage({
       note,
       cell_price_mode: cellPriceMode,
       excluded_spec_item_ids: excludedSpecItemIds
+    })
+  })
+}
+
+export async function awardBidRows({
+  bidPackageId,
+  selections
+}) {
+  return request(`/api/bid_packages/${bidPackageId}/award_rows`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      selections
+    })
+  })
+}
+
+export async function clearAwardRows({
+  bidPackageId,
+  specItemIds = []
+}) {
+  return request(`/api/bid_packages/${bidPackageId}/clear_award_rows`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      spec_item_ids: specItemIds
+    })
+  })
+}
+
+export async function clearBidderAwards({
+  bidPackageId,
+  bidId
+}) {
+  return request(`/api/bid_packages/${bidPackageId}/clear_bidder_awards`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      bid_id: bidId
     })
   })
 }
@@ -423,6 +511,18 @@ export async function clearBidPackageAward({
   })
 }
 
+export async function updateBidPackageAwardScope({
+  bidPackageId,
+  excludedSpecItemIds = []
+}) {
+  return request(`/api/bid_packages/${bidPackageId}/award_scope`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      excluded_spec_item_ids: excludedSpecItemIds
+    })
+  })
+}
+
 export function comparisonExportUrl(
   bidPackageId,
   dealerPriceMode = {},
@@ -431,7 +531,8 @@ export function comparisonExportUrl(
   excludedSpecItemIds = [],
   comparisonMode = 'average',
   columnOptions = {},
-  exportType = 'comparison'
+  exportType = 'comparison',
+  exportOptions = {}
 ) {
   const params = new URLSearchParams()
   Object.entries(dealerPriceMode || {}).forEach(([inviteId, mode]) => {
@@ -458,8 +559,17 @@ export function comparisonExportUrl(
   }
   params.append('show_product', String(columnOptions.showProduct ?? true))
   params.append('show_brand', String(columnOptions.showBrand ?? true))
+  params.append('show_unit_price', String(columnOptions.showUnitPrice ?? true))
   params.append('show_lead_time', String(columnOptions.showLeadTime ?? false))
   params.append('show_notes', String(columnOptions.showNotes ?? false))
+  ;(exportOptions.visibleDealerInviteIds || []).forEach((inviteId) => {
+    if (inviteId != null && inviteId !== '') {
+      params.append('visible_dealer_invite_ids[]', String(inviteId))
+    }
+  })
+  ;(exportOptions.columnOrder || []).forEach((columnKey) => {
+    if (columnKey) params.append('column_order[]', String(columnKey))
+  })
   const query = params.toString()
   return buildApiUrl(`/bid_packages/${bidPackageId}/export.${format}${query ? `?${query}` : ''}`)
 }
@@ -497,13 +607,14 @@ export async function submitDealerBid(token) {
   })
 }
 
-export async function createDealerPostAwardUpload(token, { file, fileName, note, specItemId }) {
+export async function createDealerPostAwardUpload(token, { file, fileName, note, specItemId, isSubstitution }) {
   if (file) {
     const formData = new FormData()
     formData.append('file', file)
     if (fileName) formData.append('file_name', fileName)
     if (note) formData.append('note', note)
     if (specItemId != null && specItemId !== '') formData.append('spec_item_id', String(specItemId))
+    if (isSubstitution != null) formData.append('is_substitution', isSubstitution ? 'true' : 'false')
     return request(`/api/invites/${token}/post_award_uploads`, {
       method: 'POST',
       body: formData
@@ -515,18 +626,26 @@ export async function createDealerPostAwardUpload(token, { file, fileName, note,
     body: JSON.stringify({
       file_name: fileName,
       note,
-      spec_item_id: specItemId
+      spec_item_id: specItemId,
+      is_substitution: Boolean(isSubstitution)
     })
   })
 }
 
-export async function createBidPackagePostAwardUpload(bidPackageId, { file, fileName, note, specItemId, requirementKey }) {
+export async function deleteDealerPostAwardUpload(token, uploadId) {
+  return request(`/api/invites/${token}/post_award_uploads/${uploadId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function createBidPackagePostAwardUpload(bidPackageId, { file, fileName, note, specItemId, requirementKey, isSubstitution }) {
   const formData = new FormData()
   if (file) formData.append('file', file)
   if (fileName) formData.append('file_name', fileName)
   if (note) formData.append('note', note)
   if (specItemId != null && specItemId !== '') formData.append('spec_item_id', String(specItemId))
   if (requirementKey) formData.append('requirement_key', String(requirementKey))
+  if (isSubstitution != null) formData.append('is_substitution', isSubstitution ? 'true' : 'false')
 
   return request(`/api/bid_packages/${bidPackageId}/post_award_uploads`, {
     method: 'POST',

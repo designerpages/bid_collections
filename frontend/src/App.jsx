@@ -9,6 +9,7 @@ import DealerUnlockPage from './pages/DealerUnlockPage'
 import DealerBidPage from './pages/DealerBidPage'
 import ComparisonPage from './pages/ComparisonPage'
 import PublicBidPackagePage from './pages/PublicBidPackagePage'
+import DesignerHandoffPage from './pages/DesignerHandoffPage'
 
 const utilityNavItems = [
   { to: '/vendors', label: 'Vendors' },
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/invite/:token/bid" element={<DealerBidPage />} />
           <Route path="/public/bid-packages/:token" element={<PublicBidPackagePage />} />
           <Route path="/comparison" element={<ComparisonPage />} />
+          <Route path="/design-handoff/designer-bidders-comparison" element={<DesignerHandoffPage />} />
         </Routes>
       </main>
     </div>

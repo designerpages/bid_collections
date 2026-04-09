@@ -5,6 +5,7 @@ class BidLineItem < ApplicationRecord
   before_validation :normalize_lead_time_days
 
   validates :unit_price, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
+  validates :quantity, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   validates :discount_percent, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
   validates :tariff_percent, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
   validates :spec_item_id, uniqueness: { scope: [:bid_id, :is_substitution] }

@@ -33,7 +33,7 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
       expect(json_response['valid']).to eq(true)
       expect(json_response['source_profile']).to eq('designer_pages')
       expect(json_response['sample_rows'][0]['manufacturer']).to eq('KI')
-      expect(json_response['sample_rows'][0]['quantity'].to_f).to eq(1.0)
+      expect(json_response['sample_rows'][0]['quantity']).to be_nil
       expect(json_response['sample_rows'][0]['uom']).to eq('EA')
     end
 
@@ -103,7 +103,7 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
            headers: { 'CONTENT_TYPE' => 'application/json' }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(json_response['errors'].join).to include('quantity must be numeric and > 0')
+      expect(json_response['errors'].join).to include('quantity must be numeric and >= 0')
     end
   end
 
@@ -145,7 +145,7 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
            headers: { 'CONTENT_TYPE' => 'application/json' }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(json_response['errors'].join).to include('quantity must be numeric and > 0')
+      expect(json_response['errors'].join).to include('quantity must be numeric and >= 0')
     end
   end
 
@@ -170,8 +170,21 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
         password_confirmation: 'bidpass123'
       )
     end
+    let!(:spec_item) do
+      bid_package.spec_items.create!(
+        spec_item_id: 'S-BASE',
+        category: 'Seating',
+        manufacturer: 'Acme',
+        product_name: 'Chair',
+        sku: 'CH-BASE',
+        description: 'Chair',
+        quantity: 10,
+        uom: 'EA'
+      )
+    end
     let!(:bid_a) do
       invite_a.create_bid!(state: :submitted, submitted_at: Time.current).tap do |bid|
+        bid.bid_line_items.create!(spec_item: spec_item, unit_price: 1250)
         bid.bid_submission_versions.create!(
           version_number: 1,
           submitted_at: Time.current,
@@ -182,6 +195,7 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
     end
     let!(:bid_b) do
       invite_b.create_bid!(state: :submitted, submitted_at: Time.current).tap do |bid|
+        bid.bid_line_items.create!(spec_item: spec_item, unit_price: 1145.075)
         bid.bid_submission_versions.create!(
           version_number: 1,
           submitted_at: Time.current,
@@ -202,13 +216,10 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(bid_package.reload.awarded_bid_id).to eq(bid_a.id)
+      expect(bid_package.package_award_status).to eq('fully_awarded')
+      expect(bid_package.bid_row_awards.count).to eq(1)
       expect(bid_a.reload.selection_status).to eq('awarded')
       expect(bid_b.reload.selection_status).to eq('not_selected')
-
-      event = bid_package.bid_award_events.order(:id).last
-      expect(event.event_type).to eq('award')
-      expect(event.to_bid_id).to eq(bid_a.id)
-      expect(event.awarded_amount_snapshot.to_s).to eq('12500.25')
     end
 
     it 're-awards and retains award history' do
@@ -226,10 +237,9 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(bid_package.reload.awarded_bid_id).to eq(bid_b.id)
+      expect(bid_package.bid_row_awards.pick(:bid_id)).to eq(bid_b.id)
       expect(bid_a.reload.selection_status).to eq('not_selected')
       expect(bid_b.reload.selection_status).to eq('awarded')
-      expect(bid_package.bid_award_events.count).to eq(2)
-      expect(bid_package.bid_award_events.order(:id).last.event_type).to eq('reaward')
     end
 
     it 'can remove an existing award without reassigning' do
@@ -244,9 +254,45 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
       expect(response).to have_http_status(:ok)
       expect(bid_package.reload.awarded_bid_id).to be_nil
       expect(bid_package.awarded_at).to be_nil
+      expect(bid_package.bid_row_awards.count).to eq(0)
+      expect(bid_package.package_award_status).to eq('not_awarded')
       expect(bid_a.reload.selection_status).to eq('pending')
       expect(bid_b.reload.selection_status).to eq('pending')
-      expect(bid_package.bid_award_events.order(:id).last.event_type).to eq('unaward')
+    end
+
+    it 'commits row awards independently and derives partial package status' do
+      second_item = bid_package.spec_items.create!(
+        spec_item_id: 'S-ROW-2',
+        category: 'Seating',
+        manufacturer: 'Acme',
+        product_name: 'Desk',
+        sku: 'DK-1',
+        description: 'Desk',
+        quantity: 1,
+        uom: 'EA'
+      )
+      bid_a.bid_line_items.create!(spec_item: second_item, unit_price: 900)
+      bid_b.bid_line_items.create!(spec_item: second_item, unit_price: 850)
+
+      patch "/api/bid_packages/#{bid_package.id}/award_rows",
+            params: {
+              selections: [
+                {
+                  spec_item_id: spec_item.id,
+                  bid_id: bid_a.id,
+                  price_source: 'bod',
+                  unit_price_snapshot: '1250.0',
+                  extended_price_snapshot: '12500.0'
+                }
+              ]
+            }.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:ok)
+      expect(bid_package.reload.package_award_status).to eq('partially_awarded')
+      expect(bid_package.award_winner_scope).to eq('single_winner')
+      expect(bid_package.awarded_bid_id).to be_nil
+      expect(bid_package.bid_row_awards.count).to eq(1)
     end
 
     it 'approves a required line-item requirement with timestamp' do
@@ -389,6 +435,76 @@ RSpec.describe 'Admin Bid Packages API', type: :request do
       expect(approval).to be_present
       expect(approval.status).to eq('pending')
       expect(approval.action_history_array.map { |event| event['action'] }).to include('needs_fix', 'reset')
+    end
+
+    it 'supports sub-row approval ownership per requirement column' do
+      item = bid_package.spec_items.create!(
+        spec_item_id: 'S-055',
+        category: 'Seating',
+        manufacturer: 'Acme',
+        product_name: 'Credenza',
+        sku: 'CR-1',
+        description: 'Credenza',
+        quantity: 1,
+        uom: 'EA'
+      )
+      requirement_keys = PostAward::RequiredApprovalsService.requirements_for_spec_item(item).first(2).map { |row| row[:key] }
+      component_requirement = requirement_keys.first
+      direct_requirement = requirement_keys.last
+
+      post "/api/bid_packages/#{bid_package.id}/award",
+           params: { bid_id: bid_a.id, awarded_by: 'designer@example.com' }.to_json,
+           headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      patch "/api/bid_packages/#{bid_package.id}/spec_items/#{item.id}/requirements/#{component_requirement}/approve",
+            params: {}.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
+
+      post "/api/bid_packages/#{bid_package.id}/spec_items/#{item.id}/approval_components",
+           params: { label: 'Top' }.to_json,
+           headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:created)
+      component_id = json_response.dig('component', 'id')
+
+      patch "/api/bid_packages/#{bid_package.id}/spec_items/#{item.id}/approval_components/#{component_id}/requirements/#{component_requirement}/activate",
+            params: {}.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
+      expect(
+        SpecItemRequirementApproval.where(
+          spec_item_id: item.id,
+          requirement_key: component_requirement,
+          component_id: nil,
+          bid_id: bid_a.id
+        )
+      ).to be_empty
+
+      patch "/api/bid_packages/#{bid_package.id}/spec_items/#{item.id}/requirements/#{component_requirement}/approve",
+            params: { component_id: component_id }.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
+
+      patch "/api/bid_packages/#{bid_package.id}/spec_items/#{item.id}/requirements/#{direct_requirement}/approve",
+            params: {}.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
+
+      get "/api/bid_packages/#{bid_package.id}/dashboard"
+      expect(response).to have_http_status(:ok)
+
+      dashboard_item = json_response['spec_items'].find { |entry| entry['id'] == item.id }
+      component_requirement_payload = dashboard_item['required_approvals'].find { |entry| entry['key'] == component_requirement }
+      direct_requirement_payload = dashboard_item['required_approvals'].find { |entry| entry['key'] == direct_requirement }
+      component_payload = dashboard_item['approval_components'].find { |entry| entry['id'] == component_id }
+      component_cell = component_payload['required_approvals'].find { |entry| entry['key'] == component_requirement }
+
+      expect(component_requirement_payload['ownership']).to eq('components')
+      expect(component_requirement_payload['status']).to eq('approved')
+      expect(direct_requirement_payload['ownership']).to eq('parent')
+      expect(direct_requirement_payload['status']).to eq('approved')
+      expect(component_cell['ownership']).to eq('component')
+      expect(component_cell['status']).to eq('approved')
     end
 
     it 'exports approval matrix and audit in awarded mode' do

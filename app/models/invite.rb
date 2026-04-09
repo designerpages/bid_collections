@@ -9,8 +9,16 @@ class Invite < ApplicationRecord
   has_secure_password
   has_secure_token :token
 
+  before_validation :ensure_token
+
   validates :dealer_name, presence: true
   validates :token, presence: true, uniqueness: true
 
   scope :active, -> { where(disabled: false) }
+
+  private
+
+  def ensure_token
+    self.token = SecureRandom.urlsafe_base64(18) if token.blank?
+  end
 end

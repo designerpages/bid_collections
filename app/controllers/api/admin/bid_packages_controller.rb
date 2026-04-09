@@ -59,7 +59,8 @@ module Api
           parsed_rows: preview.rows,
           visibility: package_settings_params[:visibility],
           active_general_fields: package_settings_params[:active_general_fields],
-          instructions: package_settings_params[:instructions]
+          instructions: package_settings_params[:instructions],
+          custom_questions: package_settings_params[:custom_questions]
         ).call
 
         if result.success?
@@ -138,19 +139,77 @@ module Api
         bid_package = BidPackage.find(params[:id])
         bid = bid_package.bids.includes(:invite).find(params.require(:bid_id))
 
-        result = Awards::BidPackageAwardService.new(
+        result = Awards::BidPackageRowAwardService.new(
           bid_package: bid_package,
-          bid: bid,
-          awarded_by: awarding_user_name,
-          note: params[:note],
-          awarded_amount_snapshot: params[:awarded_amount_snapshot],
-          comparison_snapshot: comparison_snapshot_params,
-          allow_reassign: false
+          selections: build_bulk_row_award_selections(bid_package, bid, comparison_snapshot_params),
+          awarded_by: awarding_user_name
         ).call
 
-        return render_award_success(result) if result.success?
+        return render_row_award_success(result) if result.success?
+ 
+        render_award_failure(result)
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def award_rows
+        bid_package = BidPackage.find(params[:id])
+
+        result = Awards::BidPackageRowAwardService.new(
+          bid_package: bid_package,
+          selections: row_award_selections_params,
+          awarded_by: awarding_user_name
+        ).call
+
+        return render_row_award_success(result) if result.success?
 
         render_award_failure(result)
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def clear_award_rows
+        bid_package = BidPackage.find(params[:id])
+        spec_item_ids = Array(params[:spec_item_ids]).map(&:to_i).uniq
+        return render_unprocessable!('Select at least one row award to remove') if spec_item_ids.empty?
+
+        cleared_count = bid_package.bid_row_awards.where(spec_item_id: spec_item_ids).delete_all
+        bid_package.refresh_award_summary!
+
+        render json: {
+          cleared: true,
+          cleared_count: cleared_count,
+          bid_package_id: bid_package.id,
+          awarded_bid_id: bid_package.awarded_bid_id,
+          awarded_at: bid_package.awarded_at,
+          package_award_status: bid_package.package_award_status,
+          awarded_row_count: bid_package.awarded_row_count,
+          eligible_row_count: bid_package.eligible_award_row_count,
+          award_winner_scope: bid_package.award_winner_scope
+        }
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def clear_bidder_awards
+        bid_package = BidPackage.find(params[:id])
+        bid_id = params[:bid_id].to_i
+        return render_unprocessable!('Select a bidder to clear awards from') if bid_id <= 0
+
+        cleared_count = bid_package.bid_row_awards.where(bid_id: bid_id).delete_all
+        bid_package.refresh_award_summary!
+
+        render json: {
+          cleared: true,
+          cleared_count: cleared_count,
+          bid_package_id: bid_package.id,
+          awarded_bid_id: bid_package.awarded_bid_id,
+          awarded_at: bid_package.awarded_at,
+          package_award_status: bid_package.package_award_status,
+          awarded_row_count: bid_package.awarded_row_count,
+          eligible_row_count: bid_package.eligible_award_row_count,
+          award_winner_scope: bid_package.award_winner_scope
+        }
       rescue StandardError => e
         render_award_exception(e)
       end
@@ -159,17 +218,13 @@ module Api
         bid_package = BidPackage.find(params[:id])
         bid = bid_package.bids.includes(:invite).find(params.require(:bid_id))
 
-        result = Awards::BidPackageAwardService.new(
+        result = Awards::BidPackageRowAwardService.new(
           bid_package: bid_package,
-          bid: bid,
-          awarded_by: awarding_user_name,
-          note: params[:note],
-          awarded_amount_snapshot: params[:awarded_amount_snapshot],
-          comparison_snapshot: comparison_snapshot_params,
-          allow_reassign: true
+          selections: build_bulk_row_award_selections(bid_package, bid, comparison_snapshot_params),
+          awarded_by: awarding_user_name
         ).call
 
-        return render_award_success(result) if result.success?
+        return render_row_award_success(result) if result.success?
 
         render_award_failure(result)
       rescue StandardError => e
@@ -178,37 +233,141 @@ module Api
 
       def clear_award
         bid_package = BidPackage.find(params[:id])
+        cleared_count = bid_package.bid_row_awards.delete_all
+        bid_package.refresh_award_summary!
 
-        result = Awards::BidPackageClearAwardService.new(
-          bid_package: bid_package,
-          awarded_by: awarding_user_name,
-          note: params[:note],
-          awarded_amount_snapshot: params[:awarded_amount_snapshot],
-          comparison_snapshot: comparison_snapshot_params
-        ).call
+        render json: {
+          cleared: true,
+          cleared_count: cleared_count,
+          bid_package_id: bid_package.id,
+          awarded_bid_id: bid_package.awarded_bid_id,
+          awarded_at: bid_package.awarded_at,
+          package_award_status: bid_package.package_award_status,
+          awarded_row_count: bid_package.awarded_row_count,
+          eligible_row_count: bid_package.eligible_award_row_count,
+          award_winner_scope: bid_package.award_winner_scope
+        }
+      rescue StandardError => e
+        render_award_exception(e)
+      end
 
-        if result.success?
-          event = result.bid_award_event
-          render json: {
-            cleared: true,
-            bid_package_id: result.bid_package.id,
-            awarded_bid_id: result.bid_package.awarded_bid_id,
-            awarded_at: result.bid_package.awarded_at,
-            award_event: {
-              id: event.id,
-              event_type: event.event_type,
-              from_bid_id: event.from_bid_id,
-              to_bid_id: event.to_bid_id,
-              awarded_amount_snapshot: event.awarded_amount_snapshot,
-              awarded_by: event.awarded_by,
-              note: event.note,
-              awarded_at: event.awarded_at,
-              comparison_snapshot: event.comparison_snapshot
-            }
-          }
-        else
-          render_award_failure(result)
-        end
+      def award_scope
+        bid_package = BidPackage.find(params[:id])
+        bid_package.update!(excluded_spec_item_ids: normalized_spec_item_ids(params[:excluded_spec_item_ids]))
+        bid_package.refresh_award_summary! if bid_package.award_committed?
+
+        render json: {
+          updated: true,
+          bid_package_id: bid_package.id,
+          excluded_spec_item_ids: bid_package.excluded_spec_item_ids,
+          package_award_status: bid_package.package_award_status,
+          awarded_row_count: bid_package.awarded_row_count,
+          eligible_row_count: bid_package.eligible_award_row_count,
+          award_winner_scope: bid_package.award_winner_scope
+        }
+      rescue ActiveRecord::RecordInvalid => e
+        render_unprocessable!(e.record.errors.full_messages)
+      end
+
+      def create_spec_item_approval_component
+        bid_package = BidPackage.find(params[:id])
+        spec_item = bid_package.spec_items.find(params[:spec_item_id])
+        component = bid_package.spec_item_approval_components.create!(
+          spec_item: spec_item,
+          label: params[:label].presence || next_component_label(spec_item),
+          position: next_component_position(spec_item)
+        )
+
+        render json: {
+          created: true,
+          component: serialize_spec_item_component(component, spec_item)
+        }, status: :created
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def update_spec_item_approval_component
+        bid_package = BidPackage.find(params[:id])
+        spec_item = bid_package.spec_items.find(params[:spec_item_id])
+        component = spec_item.spec_item_approval_components.find(params[:component_id])
+        component.update!(label: params[:label].to_s.strip.presence || component.label)
+
+        render json: {
+          updated: true,
+          component: serialize_spec_item_component(component, spec_item)
+        }
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def delete_spec_item_approval_component
+        bid_package = BidPackage.find(params[:id])
+        spec_item = bid_package.spec_items.find(params[:spec_item_id])
+        component = spec_item.spec_item_approval_components.find(params[:component_id])
+        component.destroy!
+
+        render json: { deleted: true, component_id: component.id, spec_item_id: spec_item.id }
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def activate_spec_item_component_requirement
+        bid_package = BidPackage.find(params[:id])
+        spec_item, requirement_key = load_valid_requirement!(bid_package)
+        return if performed?
+
+        component = load_requirement_component!(spec_item)
+        return if performed?
+
+        clear_parent_requirement_approval!(bid_package, spec_item.id, requirement_key)
+        approval = find_or_initialize_requirement_approval(
+          bid_package,
+          spec_item.id,
+          requirement_key,
+          component_id: component.id,
+          allow_parent_when_components_active: true
+        )
+        approval.status = :pending
+        approval.approved_at = nil
+        approval.approved_by = nil
+        approval.needs_fix_dates ||= []
+        approval.action_history ||= []
+        approval.save! if approval.changed?
+
+        render json: {
+          activated: true,
+          spec_item_id: spec_item.id,
+          requirement_key: requirement_key,
+          component: serialize_spec_item_component(component, spec_item),
+          requirement: serialize_requirement_for_dashboard(spec_item, requirement_key, bid_package.awarded_bid_id)
+        }
+      rescue StandardError => e
+        render_award_exception(e)
+      end
+
+      def deactivate_spec_item_component_requirement
+        bid_package = BidPackage.find(params[:id])
+        spec_item, requirement_key = load_valid_requirement!(bid_package)
+        return if performed?
+
+        component = load_requirement_component!(spec_item)
+        return if performed?
+
+        deactivated_count = bid_package.spec_item_requirement_approvals.where(
+          spec_item_id: spec_item.id,
+          requirement_key: requirement_key,
+          bid_id: bid_package.awarded_bid_id,
+          component_id: component.id
+        ).delete_all
+
+        render json: {
+          deactivated: true,
+          deactivated_count: deactivated_count,
+          spec_item_id: spec_item.id,
+          requirement_key: requirement_key,
+          component: serialize_spec_item_component(component, spec_item),
+          requirement: serialize_requirement_for_dashboard(spec_item, requirement_key, bid_package.awarded_bid_id, component: component)
+        }
       rescue StandardError => e
         render_award_exception(e)
       end
@@ -221,6 +380,7 @@ module Api
 
         approved_at = params[:approved_at].present? ? Time.zone.parse(params[:approved_at].to_s) : Time.current
         approval = find_or_initialize_requirement_approval(bid_package, spec_item.id, requirement_key)
+        return if performed?
         existing_needs_fix_dates = approval.needs_fix_dates_array
         approval.status = :approved
         approval.approved_at = approved_at
@@ -234,6 +394,7 @@ module Api
           approved: true,
           spec_item_id: spec_item.id,
           requirement_key: requirement_key,
+          component_id: approval.component_id,
           approved_at: approval.approved_at,
           approved_by: approval.approved_by,
           needs_fix_dates: approval.needs_fix_dates_array
@@ -250,6 +411,7 @@ module Api
 
         needs_fix_at = params[:needs_fix_at].present? ? Time.zone.parse(params[:needs_fix_at].to_s) : Time.current
         approval = find_or_initialize_requirement_approval(bid_package, spec_item.id, requirement_key)
+        return if performed?
         needs_fix_dates = approval.needs_fix_dates_array
         needs_fix_dates << needs_fix_at.iso8601
 
@@ -264,6 +426,7 @@ module Api
           status: approval.status,
           spec_item_id: spec_item.id,
           requirement_key: requirement_key,
+          component_id: approval.component_id,
           needs_fix_dates: approval.needs_fix_dates_array,
           needs_fix_at: needs_fix_dates.last
         }
@@ -280,6 +443,7 @@ module Api
         action_type = params[:action_type].to_s == 'reset' ? 'reset' : 'unapproved'
         action_at = params[:action_at].present? ? Time.zone.parse(params[:action_at].to_s) : Time.current
         approval = find_or_initialize_requirement_approval(bid_package, spec_item.id, requirement_key)
+        return if performed?
         approval.status = :pending
         approval.approved_at = nil
         approval.approved_by = nil
@@ -290,7 +454,8 @@ module Api
           status: 'pending',
           unapproved: true,
           spec_item_id: spec_item.id,
-          requirement_key: requirement_key
+          requirement_key: requirement_key,
+          component_id: approval.component_id
         }
       rescue StandardError => e
         render_award_exception(e)
@@ -315,6 +480,17 @@ module Api
                   filename: upload.file_name,
                   type: upload.content_type.presence || 'application/octet-stream',
                   disposition: 'attachment'
+      end
+
+      def preview_post_award_upload
+        bid_package = BidPackage.find(params[:id])
+        upload = bid_package.post_award_uploads.find(params[:upload_id])
+        return render json: { error: 'Uploaded file not found' }, status: :not_found unless upload.file_available?
+
+        send_file upload.stored_file_path,
+                  filename: upload.file_name,
+                  type: upload.content_type.presence || 'application/octet-stream',
+                  disposition: 'inline'
       end
 
       def download_post_award_uploads_bundle
@@ -367,13 +543,20 @@ module Api
         return if performed?
 
         uploaded_file = params[:file]
-        upload = bid_package.post_award_uploads.create!(
+        upload_attrs = {
           spec_item: spec_item,
           uploader_role: :designer,
           file_name: uploaded_file&.original_filename.presence || params.require(:file_name),
           note: params[:note],
           requirement_key: requirement_key
-        )
+        }
+        if requirement_key.blank? && ActiveModel::Type::Boolean.new.cast(params[:is_substitution])
+          upload_attrs[:requirement_key] = PostAwardUpload::SUBSTITUTION_ROW_REQUIREMENT_KEY
+        end
+        if PostAwardUpload.supports_substitution_flag?
+          upload_attrs[:is_substitution] = ActiveModel::Type::Boolean.new.cast(params[:is_substitution])
+        end
+        upload = bid_package.post_award_uploads.create!(upload_attrs)
         upload.persist_uploaded_file!(uploaded_file) if uploaded_file.present?
 
         render json: {
@@ -417,11 +600,19 @@ module Api
       private
 
       def package_settings_params
-        params.permit(:visibility, :instructions, active_general_fields: [])
+        params.permit(:visibility, :instructions, active_general_fields: [], custom_questions: [:id, :label])
       end
 
       def update_params
-        params.permit(:name, :visibility, :instructions, active_general_fields: [])
+        params.permit(:name, :visibility, :instructions, active_general_fields: [], excluded_spec_item_ids: [], custom_questions: [:id, :label])
+      end
+
+      def normalized_spec_item_ids(value)
+        Array(value)
+          .flat_map { |id| String(id).split(',') }
+          .map { |id| id.to_i }
+          .select(&:positive?)
+          .uniq
       end
 
       def serialize_bid_package(bid_package)
@@ -443,30 +634,28 @@ module Api
           visibility: bid_package.visibility,
           instructions: bid_package.instructions,
           active_general_fields: bid_package.active_general_fields,
+          custom_questions: bid_package.custom_questions,
+          excluded_spec_item_ids: bid_package.excluded_spec_item_ids,
           awarded_bid_id: bid_package.awarded_bid_id,
           awarded_at: bid_package.awarded_at,
+          package_award_status: bid_package.package_award_status,
+          awarded_row_count: bid_package.awarded_row_count,
+          eligible_row_count: bid_package.eligible_award_row_count,
+          award_winner_scope: bid_package.award_winner_scope,
           public_url: bid_package.visibility_public? ? "/public/bid-packages/#{bid_package.public_token}" : nil
         }
       end
 
-      def render_award_success(result)
-        event = result.bid_award_event
+      def render_row_award_success(result)
         render json: {
           awarded: true,
           bid_package_id: result.bid_package.id,
           awarded_bid_id: result.bid_package.awarded_bid_id,
           awarded_at: result.bid_package.awarded_at,
-          award_event: {
-            id: event.id,
-            event_type: event.event_type,
-            from_bid_id: event.from_bid_id,
-            to_bid_id: event.to_bid_id,
-            awarded_amount_snapshot: event.awarded_amount_snapshot,
-            awarded_by: event.awarded_by,
-            note: event.note,
-            awarded_at: event.awarded_at,
-            comparison_snapshot: event.comparison_snapshot
-          }
+          package_award_status: result.bid_package.package_award_status,
+          awarded_row_count: result.bid_package.awarded_row_count,
+          eligible_row_count: result.bid_package.eligible_award_row_count,
+          award_winner_scope: result.bid_package.award_winner_scope
         }
       end
 
@@ -487,16 +676,72 @@ module Api
 
       def comparison_snapshot_params
         {
-          excluded_spec_item_ids: Array(params[:excluded_spec_item_ids]).map(&:to_i).uniq,
+          excluded_spec_item_ids: normalized_spec_item_ids(params[:excluded_spec_item_ids]),
           cell_price_mode: params[:cell_price_mode].is_a?(ActionController::Parameters) ? params[:cell_price_mode].to_unsafe_h : {}
         }
       end
 
+      def row_award_selections_params
+        params.require(:selections).map do |selection|
+          selection.permit(
+            :spec_item_id,
+            :bid_id,
+            :price_source,
+            :unit_price_snapshot,
+            :extended_price_snapshot
+          )
+        end
+      end
+
       def ensure_not_awarded!
         bid_package = BidPackage.find(params[:id])
-        return unless bid_package.awarded?
+        return unless bid_package.award_committed?
 
         render json: { error: 'Bid package is awarded and locked for bid package edits' }, status: :conflict
+      end
+
+      def build_bulk_row_award_selections(bid_package, bid, snapshot)
+        excluded_ids = Array(snapshot[:excluded_spec_item_ids]).map(&:to_i).uniq
+        price_mode_map = snapshot[:cell_price_mode].is_a?(Hash) ? snapshot[:cell_price_mode] : {}
+
+        bid_package.spec_items.active.where.not(id: excluded_ids).map do |spec_item|
+          selected_line = select_award_line_item(
+            bid,
+            spec_item.id,
+            resolve_row_price_source(price_mode_map, spec_item.id, bid.invite_id)
+          )
+          next unless selected_line.present? && selected_line.unit_net_price.present?
+
+          {
+            spec_item_id: spec_item.id,
+            bid_id: bid.id,
+            price_source: selected_line.is_substitution? ? 'alt' : 'bod',
+            unit_price_snapshot: selected_line.unit_net_price,
+            extended_price_snapshot: begin
+              quantity = selected_line.quantity.presence || spec_item.quantity
+              quantity.present? ? (selected_line.unit_net_price * quantity.to_d).round(2) : nil
+            end
+          }
+        end.compact
+      end
+
+      def resolve_row_price_source(price_mode_map, spec_item_id, invite_id)
+        by_spec_item = price_mode_map[spec_item_id.to_s] || price_mode_map[spec_item_id.to_i]
+        return 'bod' unless by_spec_item.respond_to?(:[])
+
+        mode = by_spec_item[invite_id.to_s] || by_spec_item[invite_id.to_i]
+        mode == 'alt' ? 'alt' : 'bod'
+      end
+
+      def select_award_line_item(bid, spec_item_id, preferred_mode)
+        lines = bid.bid_line_items.select { |line| line.spec_item_id == spec_item_id }
+        basis_line = lines.find { |line| !line.is_substitution? && line.unit_price.present? }
+        substitution_line = lines.find { |line| line.is_substitution? && line.unit_price.present? }
+
+        return substitution_line if preferred_mode == 'alt' && substitution_line.present?
+        return basis_line if preferred_mode == 'bod' && basis_line.present?
+
+        basis_line || substitution_line
       end
 
       def render_award_exception(error)
@@ -523,12 +768,53 @@ module Api
         [spec_item, requirement_key]
       end
 
-      def find_or_initialize_requirement_approval(bid_package, spec_item_id, requirement_key)
+      def load_requirement_component!(spec_item)
+        component_id = params[:component_id].presence || params[:approval_component_id].presence || params[:component]&.[](:id)
+        return nil if component_id.blank?
+
+        spec_item.spec_item_approval_components.find(component_id)
+      rescue ActiveRecord::RecordNotFound
+        render json: { errors: ['Approval component not found for this line item'] }, status: :unprocessable_entity
+        nil
+      end
+
+      def find_or_initialize_requirement_approval(bid_package, spec_item_id, requirement_key, component_id: :auto, allow_parent_when_components_active: false)
+        resolved_component_id = if component_id == :auto
+          resolved_component = load_requirement_component!(bid_package.spec_items.find(spec_item_id))
+          return if performed?
+
+          resolved_component&.id
+        else
+          component_id
+        end
+
+        if resolved_component_id.blank? && !allow_parent_when_components_active
+          component_scope = bid_package.spec_item_requirement_approvals.where(
+            spec_item_id: spec_item_id,
+            requirement_key: requirement_key,
+            bid_id: bid_package.awarded_bid_id
+          ).where.not(component_id: nil)
+          if component_scope.exists?
+            render json: { errors: ['This requirement is managed by sub-rows for this column'] }, status: :unprocessable_entity
+            return
+          end
+        end
+
         bid_package.spec_item_requirement_approvals.find_or_initialize_by(
           spec_item_id: spec_item_id,
           requirement_key: requirement_key,
-          bid_id: bid_package.awarded_bid_id
+          bid_id: bid_package.awarded_bid_id,
+          component_id: resolved_component_id
         )
+      end
+
+      def clear_parent_requirement_approval!(bid_package, spec_item_id, requirement_key)
+        bid_package.spec_item_requirement_approvals.where(
+          spec_item_id: spec_item_id,
+          requirement_key: requirement_key,
+          bid_id: bid_package.awarded_bid_id,
+          component_id: nil
+        ).delete_all
       end
 
       def append_action_history(approval, action:, at:)
@@ -540,12 +826,93 @@ module Api
         approval.action_history = history
       end
 
+      def next_component_position(spec_item)
+        spec_item.spec_item_approval_components.maximum(:position).to_i + 1
+      end
+
+      def next_component_label(spec_item)
+        "Component #{spec_item.spec_item_approval_components.count + 1}"
+      end
+
+      def serialize_spec_item_component(component, spec_item)
+        bid_id = component.bid_package.awarded_bid_id
+        {
+          id: component.id,
+          label: component.label,
+          position: component.position,
+          required_approvals: PostAward::RequiredApprovalsService.requirements_for_spec_item(spec_item).map do |req|
+            serialize_requirement_for_dashboard(spec_item, req[:key], bid_id, component: component)
+          end
+        }
+      end
+
+      def serialize_requirement_for_dashboard(spec_item, requirement_key, bid_id, component: nil)
+        allowed_requirements = PostAward::RequiredApprovalsService.requirements_for_spec_item(spec_item)
+        requirement_meta = allowed_requirements.find { |req| req[:key] == requirement_key }
+        applies = requirement_meta.present?
+        approvals_scope = spec_item.bid_package.spec_item_requirement_approvals.where(
+          spec_item_id: spec_item.id,
+          requirement_key: requirement_key,
+          bid_id: bid_id
+        )
+
+        if component.present?
+          approval = approvals_scope.find_by(component_id: component.id)
+          return build_requirement_payload(requirement_meta, applies, approval, ownership: approval.present? ? 'component' : 'inactive')
+        end
+
+        component_approvals = approvals_scope.where.not(component_id: nil).includes(:component).to_a
+        if component_approvals.any?
+          derived_status = component_approvals.all?(&:approved?) ? 'approved' : 'incomplete'
+          latest_approved_at = component_approvals.map(&:approved_at).compact.max
+          return {
+            key: requirement_key,
+            label: requirement_meta&.dig(:label) || requirement_key.to_s.humanize,
+            applies: applies,
+            status: derived_status,
+            approved: derived_status == 'approved',
+            approved_at: latest_approved_at,
+            approved_by: nil,
+            needs_fix_dates: [],
+            ownership: 'components',
+            activated_sub_rows_count: component_approvals.length
+          }
+        end
+
+        approval = approvals_scope.find_by(component_id: nil)
+        build_requirement_payload(requirement_meta, applies, approval, ownership: 'parent')
+      end
+
+      def build_requirement_payload(requirement_meta, applies, approval, ownership:)
+        status = if ownership == 'inactive'
+          'inactive'
+        elsif applies
+          approval&.status || 'pending'
+        else
+          'pending'
+        end
+
+        {
+          key: requirement_meta&.dig(:key) || approval&.requirement_key,
+          label: requirement_meta&.dig(:label) || approval&.requirement_key.to_s.humanize,
+          applies: applies,
+          status: status,
+          approved: applies && status == 'approved',
+          approved_at: approval&.approved_at,
+          approved_by: approval&.approved_by,
+          needs_fix_dates: approval&.needs_fix_dates_array || [],
+          ownership: ownership,
+          component_id: approval&.component_id
+        }
+      end
+
       def serialize_post_award_upload(upload, bid_package)
         {
           id: upload.id,
           file_name: upload.file_name,
           note: upload.note,
-          requirement_key: upload.requirement_key,
+          requirement_key: upload.api_requirement_key,
+          is_substitution: upload.substitution_upload?,
           byte_size: upload.byte_size,
           uploader_role: upload.uploader_role,
           uploaded_by: upload.invite&.dealer_name || upload.uploader_role.to_s.titleize,

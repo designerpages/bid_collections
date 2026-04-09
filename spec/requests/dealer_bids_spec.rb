@@ -137,10 +137,7 @@ RSpec.describe 'Dealer Bid Flow API', type: :request do
     expect(response).to have_http_status(:conflict)
   end
 
-  it 'allows awarded vendor to upload post-award files' do
-    bid = invite.create_bid!(state: :submitted, submitted_at: Time.current)
-    bid_package.update!(awarded_bid: bid, awarded_at: Time.current)
-
+  it 'allows bidder to upload line-item files before award' do
     post "/api/invites/#{invite.token}/unlock",
          params: { password: 'bidpass123' }.to_json,
          headers: { 'CONTENT_TYPE' => 'application/json' }
@@ -152,5 +149,23 @@ RSpec.describe 'Dealer Bid Flow API', type: :request do
     expect(response).to have_http_status(:created)
     expect(json_response.dig('upload', 'file_name')).to eq('shop-drawing.pdf')
     expect(PostAwardUpload.count).to eq(1)
+  end
+
+  it 'allows bidder to delete their uploaded file' do
+    post "/api/invites/#{invite.token}/unlock",
+         params: { password: 'bidpass123' }.to_json,
+         headers: { 'CONTENT_TYPE' => 'application/json' }
+
+    upload = bid_package.post_award_uploads.create!(
+      invite: invite,
+      spec_item: spec_item,
+      uploader_role: :vendor,
+      file_name: 'shop-drawing.pdf'
+    )
+
+    delete "/api/invites/#{invite.token}/post_award_uploads/#{upload.id}"
+
+    expect(response).to have_http_status(:ok)
+    expect(PostAwardUpload.find_by(id: upload.id)).to be_nil
   end
 end

@@ -4,7 +4,7 @@
 This document captures how the Bid Collections MVP evolved through iterative product feedback and implementation decisions, and how those decisions map to the current codebase.
 
 Primary repo path:
-`/Users/aparra/Documents/workspace/bid-collections`
+`/Users/jacobslevin/Documents/Documents - Jacob’s Mac Studio/Jake 2.0/Codex/Bid Collection`
 
 ---
 
@@ -25,7 +25,14 @@ Enable a designer to:
 - Data: MySQL (`mysql2`)
 - Runtime target: Ruby `2.4.5`, Rails `5.2.x`
 - Frontend runtime target: Node `14.0.0` (`frontend/.nvmrc`)
+- Frontend library target: React `17.x`, ReactDOM `17.x`
 - Local dev: Rails on `localhost:3000`, Vite on `localhost:5173`
+
+### Compatibility Baseline
+- Backend target is Rails `5.2.8.x`; avoid Rails 6/7-only APIs in shared code intended for host-app mounting.
+- Frontend target is React `17.x`; the UI package currently depends on `react-router-dom` `6.x`, so host apps embedding the frontend should validate router interoperability explicitly.
+- Service-style integration can be used from a host app on a different stack, because the host only talks to the standalone API and/or serves the built frontend assets.
+- Engine mode is the strict compatibility path: host app should match the legacy Ruby/Rails baseline closely enough to load the engine and run its migrations safely.
 
 ---
 
@@ -165,7 +172,7 @@ Integration note:
 From project root:
 
 ```bash
-cd "/Users/aparra/Documents/workspace/bid-collections"
+cd "/Users/jacobslevin/Documents/Documents - Jacob’s Mac Studio/Jake 2.0/Codex/Bid Collection"
 bundle install
 bin/rails db:migrate
 bin/rails s
@@ -181,7 +188,7 @@ bin/rails s
 Frontend:
 
 ```bash
-cd "/Users/aparra/Documents/workspace/bid-collections/frontend"
+cd "/Users/jacobslevin/Documents/Documents - Jacob’s Mac Studio/Jake 2.0/Codex/Bid Collection/frontend"
 nvm use
 npm install
 npm run dev
@@ -193,7 +200,7 @@ API routing for embedded host integration:
 
 ---
 
-## Host App Integration (Rails 5.2 + React)
+## Host App Integration (Rails 5.2 + React 17)
 
 Two supported modes:
 1. Service-style integration (`/api` served by standalone bid-collections app).
@@ -201,6 +208,11 @@ Two supported modes:
    - `gem 'bid_collections', path: '../bid-collections'` or Git source
    - `mount BidCollections::Engine => '/bid_collections'`
    - `bin/rails railties:install:migrations && bin/rails db:migrate`
+
+Integration guidance:
+- Service-style mode does not require the host app itself to run Rails `5.2` or React `17`; it only needs to proxy the API and/or host the built frontend.
+- Engine mode is the path that should be treated as Rails `5.2` compatible.
+- Frontend embedding should be treated as React `17` compatible unless/until the package is intentionally upgraded and revalidated.
 
 ---
 
@@ -210,4 +222,3 @@ Two supported modes:
 3. Add structured activity/audit logs.
 4. Add robust import profiles + schema validation UI.
 5. Add background jobs for email sending and large CSV processing.
-

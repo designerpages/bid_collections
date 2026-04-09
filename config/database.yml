@@ -1,7 +1,7 @@
 default: &default
   adapter: mysql2
   username: root
-  password: password 
+  password: greendoor1012
   host: localhost
   variables:
     sql_mode: TRADITIONAL

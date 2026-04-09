@@ -8,13 +8,18 @@ import emailIcon from '../assets/bidders-icons/email.svg'
 import reopenIcon from '../assets/bidders-icons/reopen.svg'
 import plusBidderIcon from '../assets/bidders-icons/plus-bidder.svg'
 import {
+  activateSpecItemComponentRequirement,
   API_BASE_URL,
   approveSpecItemRequirement,
   clearCurrentAwardApprovals,
   clearBidPackageAward,
+  clearAwardRows,
+  createSpecItemApprovalComponent,
   createInvite,
   createBidPackagePostAwardUpload,
+  deactivateSpecItemComponentRequirement,
   bidPackagePostAwardUploadsBundleUrl,
+  deleteSpecItemApprovalComponent,
   deleteBidPackagePostAwardUpload,
   updateBidPackagePostAwardUpload,
   deactivateSpecItem,
@@ -31,6 +36,7 @@ import {
   recloseInviteBid,
   reopenInviteBid,
   updateBidPackage,
+  updateSpecItemApprovalComponent,
   updateInvitePassword
 } from '../lib/api'
 import {
@@ -60,15 +66,18 @@ const DASHBOARD_SELECTED_PACKAGE_KEY = 'bid_collections.dashboard.selected_bid_p
 const DASHBOARD_LOADED_PACKAGE_KEY = 'bid_collections.dashboard.loaded_bid_package_id'
 const DASHBOARD_LINE_ITEMS_VIEW_KEY_PREFIX = 'bid_collections.dashboard.line_items_view.'
 const DASHBOARD_SKIP_TO_APPROVALS_KEY_PREFIX = 'bid_collections.dashboard.skip_to_approvals.'
+const DASHBOARD_PACKAGE_SETTINGS_KEY_PREFIX = 'bid_collections.dashboard.package_settings.'
+const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'bid_collections.dashboard.snapshot.'
+const COMPARISON_STATE_KEY_PREFIX = 'bid_collections.comparison.state.'
 
 const usdFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 })
 
-function awardStatusMeta(selectionStatus) {
-  if (selectionStatus === 'awarded') return { label: 'Awarded', toneClass: 'state-good' }
-  if (selectionStatus === 'not_selected') return { label: 'Lost', toneClass: 'state-bad' }
+function winnerStatusMeta(winnerStatus) {
+  if (winnerStatus === 'sole_winner') return { label: 'Sole Winner', toneClass: 'status-tone-awarded' }
+  if (winnerStatus === 'partial_winner') return { label: 'Partial Winner', toneClass: 'status-tone-awarded' }
   return null
 }
 
@@ -193,13 +202,7 @@ function compactMoney(value) {
   return `$${n.toFixed(2)}`
 }
 
-function totalLabel(row, { postAwardActive = false } = {}) {
-  if (postAwardActive) {
-    const awardedSnapshot = numberOrNull(row?.awarded_amount_snapshot)
-    if (row?.selection_status === 'awarded' && awardedSnapshot != null) return money(awardedSnapshot)
-    return money(row?.latest_total_amount)
-  }
-
+function proposedTotalLabel(row) {
   const minTotal = numberOrNull(row?.min_total_amount)
   const maxTotal = numberOrNull(row?.max_total_amount)
   if (minTotal != null && maxTotal != null) {
@@ -210,6 +213,27 @@ function totalLabel(row, { postAwardActive = false } = {}) {
   }
 
   return compactMoney(row?.latest_total_amount)
+}
+
+function totalDisplayMeta(row, { showAwardedTotals = false } = {}) {
+  const proposedLabel = proposedTotalLabel(row)
+  if (!showAwardedTotals || Number(row?.awarded_row_count || 0) <= 0) {
+    return { primary: proposedLabel, secondary: null }
+  }
+
+  const awardedAmount = numberOrNull(row?.awarded_total_amount)
+  const fallbackAwardedAmount = numberOrNull(row?.awarded_amount_snapshot)
+  const awardedLabel = compactMoney(awardedAmount != null ? awardedAmount : fallbackAwardedAmount)
+  return {
+    primary: `${awardedLabel} / ${proposedLabel}`,
+    secondary: 'Awarded / Proposed'
+  }
+}
+
+function normalizeCustomQuestions(value) {
+  return Array.isArray(value)
+    ? value.filter((question) => String(question?.id || '').trim() && String(question?.label || '').trim())
+    : []
 }
 
 function loadStoredValue(key) {
@@ -235,6 +259,80 @@ function lineItemsViewStorageKey(bidPackageId) {
 
 function approvalsOnlyStorageKey(bidPackageId) {
   return `${DASHBOARD_SKIP_TO_APPROVALS_KEY_PREFIX}${bidPackageId}`
+}
+
+function packageSettingsStorageKey(bidPackageId) {
+  return `${DASHBOARD_PACKAGE_SETTINGS_KEY_PREFIX}${bidPackageId}`
+}
+
+function loadCachedPackageSettings(bidPackageId) {
+  if (!bidPackageId) return null
+  try {
+    const raw = window.localStorage.getItem(packageSettingsStorageKey(bidPackageId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (_error) {
+    return null
+  }
+}
+
+function storeCachedPackageSettings(bidPackageId, settings) {
+  if (!bidPackageId) return
+  try {
+    if (settings && typeof settings === 'object') {
+      window.localStorage.setItem(packageSettingsStorageKey(bidPackageId), JSON.stringify(settings))
+    } else {
+      window.localStorage.removeItem(packageSettingsStorageKey(bidPackageId))
+    }
+  } catch (_error) {
+    // ignore storage failures
+  }
+}
+
+function dashboardSnapshotStorageKey(bidPackageId) {
+  return `${DASHBOARD_SNAPSHOT_KEY_PREFIX}${bidPackageId}`
+}
+
+function comparisonStateStorageKey(bidPackageId) {
+  return `${COMPARISON_STATE_KEY_PREFIX}${bidPackageId}`
+}
+
+function loadStoredComparisonExcludedIds(bidPackageId) {
+  if (!bidPackageId) return []
+  try {
+    const raw = window.localStorage.getItem(comparisonStateStorageKey(bidPackageId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed?.excludedSpecItemIds) ? parsed.excludedSpecItemIds.map((id) => String(id)) : []
+  } catch (_error) {
+    return []
+  }
+}
+
+function loadCachedDashboardSnapshot(bidPackageId) {
+  if (!bidPackageId) return null
+  try {
+    const raw = window.localStorage.getItem(dashboardSnapshotStorageKey(bidPackageId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (_error) {
+    return null
+  }
+}
+
+function storeCachedDashboardSnapshot(bidPackageId, snapshot) {
+  if (!bidPackageId) return
+  try {
+    if (snapshot && typeof snapshot === 'object') {
+      window.localStorage.setItem(dashboardSnapshotStorageKey(bidPackageId), JSON.stringify(snapshot))
+    } else {
+      window.localStorage.removeItem(dashboardSnapshotStorageKey(bidPackageId))
+    }
+  } catch (_error) {
+    // ignore storage failures
+  }
 }
 
 function loadLineItemsViewPreferences(bidPackageId) {
@@ -271,20 +369,27 @@ export default function PackageDashboardPage() {
   const navigate = useNavigate()
   const { bidPackageId: routeBidPackageId = '' } = useParams()
   const normalizedRouteBidPackageId = routeBidPackageId ? String(routeBidPackageId) : ''
+  const initialBidPackageId = normalizedRouteBidPackageId || loadStoredValue(DASHBOARD_SELECTED_PACKAGE_KEY)
+  const initialCachedPackageSettings = loadCachedPackageSettings(initialBidPackageId)
+  const initialDashboardSnapshot = loadCachedDashboardSnapshot(initialBidPackageId)
   const [bidPackages, setBidPackages] = useState([])
   const [selectedBidPackageId, setSelectedBidPackageId] = useState(() => (
-    normalizedRouteBidPackageId || loadStoredValue(DASHBOARD_SELECTED_PACKAGE_KEY)
+    initialBidPackageId
   ))
   const [loadedBidPackageId, setLoadedBidPackageId] = useState('')
   const [restoredLoadedBidPackageId, setRestoredLoadedBidPackageId] = useState(() => loadStoredValue(DASHBOARD_LOADED_PACKAGE_KEY))
-  const [rows, setRows] = useState([])
-  const [specItems, setSpecItems] = useState([])
-  const [requiredApprovalColumns, setRequiredApprovalColumns] = useState([])
-  const [currentAwardedBidId, setCurrentAwardedBidId] = useState(null)
-  const [generalUploads, setGeneralUploads] = useState([])
+  const [rows, setRows] = useState(() => Array.isArray(initialDashboardSnapshot?.rows) ? initialDashboardSnapshot.rows : [])
+  const [specItems, setSpecItems] = useState(() => Array.isArray(initialDashboardSnapshot?.specItems) ? initialDashboardSnapshot.specItems : [])
+  const [requiredApprovalColumns, setRequiredApprovalColumns] = useState(() => Array.isArray(initialDashboardSnapshot?.requiredApprovalColumns) ? initialDashboardSnapshot.requiredApprovalColumns : [])
+  const [currentAwardedBidId, setCurrentAwardedBidId] = useState(() => initialDashboardSnapshot?.currentAwardedBidId ?? null)
+  const [generalUploads, setGeneralUploads] = useState(() => Array.isArray(initialDashboardSnapshot?.generalUploads) ? initialDashboardSnapshot.generalUploads : [])
+  const [dashboardResolvedPackageId, setDashboardResolvedPackageId] = useState(() => (
+    initialDashboardSnapshot && initialBidPackageId ? String(initialBidPackageId) : ''
+  ))
   const [statusMessage, setStatusMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingPackages, setLoadingPackages] = useState(false)
+  const [excludedAwardRowIds, setExcludedAwardRowIds] = useState(() => loadStoredComparisonExcludedIds(initialBidPackageId))
   const [copiedInviteId, setCopiedInviteId] = useState(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -302,15 +407,18 @@ export default function PackageDashboardPage() {
   const [lineItemBulkDownloading, setLineItemBulkDownloading] = useState(false)
   const [lineItemSavingTagUploadId, setLineItemSavingTagUploadId] = useState(null)
   const [clearAwardModal, setClearAwardModal] = useState(null)
+  const [clearBidderAwardsModal, setClearBidderAwardsModal] = useState(null)
+  const [bidderQuestionsModal, setBidderQuestionsModal] = useState(null)
   const [deleteBidderModal, setDeleteBidderModal] = useState(null)
   const [editingPasswordInviteId, setEditingPasswordInviteId] = useState(null)
   const [passwordEditDraft, setPasswordEditDraft] = useState('')
   const [savingPasswordInviteId, setSavingPasswordInviteId] = useState(null)
-  const [loadedPackageSettings, setLoadedPackageSettings] = useState(null)
+  const [loadedPackageSettings, setLoadedPackageSettings] = useState(() => initialCachedPackageSettings)
   const [packageNameDraft, setPackageNameDraft] = useState('')
   const [visibilityDraft, setVisibilityDraft] = useState('private')
   const [instructionsDraft, setInstructionsDraft] = useState('')
   const [activeGeneralFieldsDraft, setActiveGeneralFieldsDraft] = useState(GENERAL_PRICING_FIELDS.map((field) => field.key))
+  const [customQuestionsDraft, setCustomQuestionsDraft] = useState([])
   const [editingBidPackage, setEditingBidPackage] = useState(false)
   const [showProductColumn, setShowProductColumn] = useState(true)
   const [showBrandColumn, setShowBrandColumn] = useState(true)
@@ -322,7 +430,16 @@ export default function PackageDashboardPage() {
   const [comparisonVisibleInviteIds, setComparisonVisibleInviteIds] = useState([])
   const [biddersSort, setBiddersSort] = useState('created')
   const [showAllAwardedBidders, setShowAllAwardedBidders] = useState(false)
-  const [approvalsOnlyMode, setApprovalsOnlyMode] = useState(false)
+  const [liveAwardSummary, setLiveAwardSummary] = useState(null)
+  const [comparisonReloadToken, setComparisonReloadToken] = useState(0)
+  const [bidderStatusBusyInviteId, setBidderStatusBusyInviteId] = useState(null)
+  const [approvalsOnlyMode, setApprovalsOnlyMode] = useState(() => (
+    initialBidPackageId &&
+    !initialCachedPackageSettings?.awarded_bid_id &&
+    Array.isArray(initialDashboardSnapshot?.rows) &&
+    initialDashboardSnapshot.rows.length > 0 &&
+    loadStoredValue(approvalsOnlyStorageKey(initialBidPackageId)) === '1'
+  ))
 
   const [selectedVendorKey, setSelectedVendorKey] = useState('')
   const [customVendorRecords, setCustomVendorRecords] = useState(() => loadCustomVendorRecords())
@@ -353,8 +470,13 @@ export default function PackageDashboardPage() {
         setRestoredLoadedBidPackageId('')
         setRows([])
         setSpecItems([])
+        setLoadedPackageSettings(null)
+        setRequiredApprovalColumns([])
+        setCurrentAwardedBidId(null)
+        setGeneralUploads([])
         storeValue(DASHBOARD_SELECTED_PACKAGE_KEY, '')
         storeValue(DASHBOARD_LOADED_PACKAGE_KEY, '')
+        storeCachedDashboardSnapshot(initialBidPackageId, null)
         return
       }
 
@@ -395,39 +517,54 @@ export default function PackageDashboardPage() {
 
   useEffect(() => {
     if (!normalizedRouteBidPackageId) return
-    if (String(selectedBidPackageId) !== normalizedRouteBidPackageId) {
-      setSelectedBidPackageId(normalizedRouteBidPackageId)
-    }
-    if (loading) return
-    if (String(loadedBidPackageId) === normalizedRouteBidPackageId) return
-    loadDashboard({ bidPackageId: normalizedRouteBidPackageId })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedRouteBidPackageId, loadedBidPackageId, selectedBidPackageId, loading])
+    if (String(selectedBidPackageId) === normalizedRouteBidPackageId) return
+    setSelectedBidPackageId(normalizedRouteBidPackageId)
+  }, [normalizedRouteBidPackageId, selectedBidPackageId])
 
+  useEffect(() => {
+    if (!normalizedRouteBidPackageId) return
+    if (String(loadedBidPackageId) === normalizedRouteBidPackageId) return
+    loadDashboard({ bidPackageId: normalizedRouteBidPackageId, silent: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalizedRouteBidPackageId, loadedBidPackageId])
+
+  const activePackageId = normalizedRouteBidPackageId || selectedBidPackageId || loadedBidPackageId
   const loadedPackageLabel = useMemo(() => {
-    if (!loadedBidPackageId) return ''
-    const match = bidPackages.find((item) => String(item.id) === String(loadedBidPackageId))
-    if (!match) return `Bid Package ID: ${loadedBidPackageId}`
+    if (!activePackageId) return ''
+    const match = bidPackages.find((item) => String(item.id) === String(activePackageId))
+    if (!match) return normalizedRouteBidPackageId ? '' : `Bid Package ID: ${activePackageId}`
     const projectName = match.project_name || 'Unknown Project'
     const projectId = match.project_id ?? '—'
     return `${match.name} in ${projectName} (Bid Package ID: ${match.id}, Project ID: ${projectId})`
-  }, [bidPackages, loadedBidPackageId])
+  }, [activePackageId, bidPackages, normalizedRouteBidPackageId])
   const loadedPackageRecord = useMemo(
-    () => bidPackages.find((item) => String(item.id) === String(loadedBidPackageId)) || null,
-    [bidPackages, loadedBidPackageId]
+    () => bidPackages.find((item) => String(item.id) === String(activePackageId)) || null,
+    [activePackageId, bidPackages]
   )
   const packageHeaderTitle = useMemo(() => {
     const packageName = loadedPackageRecord?.name || loadedPackageSettings?.name || ''
     if (packageName) return packageName
+    if (normalizedRouteBidPackageId) return ''
     return loadedPackageLabel || 'Bid Package'
-  }, [loadedPackageLabel, loadedPackageRecord, loadedPackageSettings])
+  }, [loadedPackageLabel, loadedPackageRecord, loadedPackageSettings, normalizedRouteBidPackageId])
 
-  const loadDashboard = async ({ closeEdit = true, bidPackageId = '' } = {}) => {
+  const loadDashboard = async ({ closeEdit = true, bidPackageId = '', silent = false } = {}) => {
     const targetBidPackageId = String(bidPackageId || selectedBidPackageId || '')
     if (!targetBidPackageId) return
 
-    setLoading(true)
-    setStatusMessage('Loading bid package...')
+    if (!silent) setLoading(true)
+    setSelectedBidPackageId(targetBidPackageId)
+    if (String(loadedBidPackageId || '') !== targetBidPackageId) {
+      const cachedSnapshot = loadCachedDashboardSnapshot(targetBidPackageId)
+      setRows(Array.isArray(cachedSnapshot?.rows) ? cachedSnapshot.rows : [])
+      setSpecItems(Array.isArray(cachedSnapshot?.specItems) ? cachedSnapshot.specItems : [])
+      setRequiredApprovalColumns(Array.isArray(cachedSnapshot?.requiredApprovalColumns) ? cachedSnapshot.requiredApprovalColumns : [])
+      setCurrentAwardedBidId(cachedSnapshot?.currentAwardedBidId ?? null)
+      setGeneralUploads(Array.isArray(cachedSnapshot?.generalUploads) ? cachedSnapshot.generalUploads : [])
+      setLoadedPackageSettings(loadCachedPackageSettings(targetBidPackageId))
+      setExcludedAwardRowIds(loadStoredComparisonExcludedIds(targetBidPackageId))
+      setDashboardResolvedPackageId(cachedSnapshot ? targetBidPackageId : '')
+    }
     try {
       const data = await fetchBidPackageDashboard(targetBidPackageId)
       const viewPrefs = loadLineItemsViewPreferences(targetBidPackageId)
@@ -441,24 +578,38 @@ export default function PackageDashboardPage() {
       setCurrentAwardedBidId(data.current_awarded_bid_id ?? null)
       setGeneralUploads(data.general_uploads || [])
       setLoadedPackageSettings(bidPackage)
+      storeCachedPackageSettings(targetBidPackageId, bidPackage)
+      storeCachedDashboardSnapshot(targetBidPackageId, {
+        rows: invites,
+        specItems: activeSpecItems,
+        requiredApprovalColumns: data.required_approval_columns || [],
+        currentAwardedBidId: data.current_awarded_bid_id ?? null,
+        generalUploads: data.general_uploads || []
+      })
       setPackageNameDraft(bidPackage?.name || '')
       setVisibilityDraft(bidPackage?.visibility || 'private')
       setInstructionsDraft(bidPackage?.instructions || '')
       setActiveGeneralFieldsDraft(bidPackage?.active_general_fields || GENERAL_PRICING_FIELDS.map((field) => field.key))
+      setCustomQuestionsDraft(normalizeCustomQuestions(bidPackage?.custom_questions))
       setShowProductColumn(viewPrefs.showProductColumn)
       setShowBrandColumn(viewPrefs.showBrandColumn)
       setShowQtyColumn(viewPrefs.showQtyColumn)
       if (closeEdit) setEditingBidPackage(false)
-      setSelectedBidPackageId(targetBidPackageId)
       setLoadedBidPackageId(targetBidPackageId)
+      setDashboardResolvedPackageId(targetBidPackageId)
       storeValue(DASHBOARD_SELECTED_PACKAGE_KEY, targetBidPackageId)
       storeValue(DASHBOARD_LOADED_PACKAGE_KEY, targetBidPackageId)
       setRestoredLoadedBidPackageId(targetBidPackageId)
+      setExcludedAwardRowIds(loadStoredComparisonExcludedIds(targetBidPackageId))
       setShowAllAwardedBidders(false)
       setHistoryView(null)
       setHistoryInviteId(null)
       const isApprovalsOnlyStored = loadStoredValue(approvalsOnlyStorageKey(targetBidPackageId)) === '1'
-      setApprovalsOnlyMode(!bidPackage?.awarded_bid_id && isApprovalsOnlyStored)
+      setApprovalsOnlyMode(
+        (bidPackage?.package_award_status || 'not_awarded') !== 'fully_awarded' &&
+        invites.length > 0 &&
+        isApprovalsOnlyStored
+      )
       setStatusMessage('')
     } catch (error) {
       setStatusMessage(error.message)
@@ -467,8 +618,9 @@ export default function PackageDashboardPage() {
       setRequiredApprovalColumns([])
       setCurrentAwardedBidId(null)
       setGeneralUploads([])
+      setDashboardResolvedPackageId(targetBidPackageId)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -477,7 +629,6 @@ export default function PackageDashboardPage() {
     if (!loadedBidPackageId || !invitePayload.dealerName || !invitePassword) return
 
     setLoading(true)
-    setStatusMessage('Creating invite...')
     try {
       if (loadedBidPackageId) {
         storeValue(approvalsOnlyStorageKey(loadedBidPackageId), '')
@@ -492,7 +643,7 @@ export default function PackageDashboardPage() {
       setSelectedVendorKey('')
       setInvitePassword('')
       setShowAddBidderForm(false)
-      setStatusMessage('Invite created. Reloading dashboard...')
+      setStatusMessage('')
       await loadDashboard()
     } catch (error) {
       setStatusMessage(error.message)
@@ -713,36 +864,28 @@ export default function PackageDashboardPage() {
   const reopenBid = async (inviteId) => {
     if (!loadedBidPackageId) return
 
-    setLoading(true)
-    setStatusMessage('Reopening bid...')
+    setBidderStatusBusyInviteId(String(inviteId))
     try {
       await reopenInviteBid({ bidPackageId: loadedBidPackageId, inviteId, reason: '' })
-      setStatusMessage('Bid reopened. Bidder can edit and resubmit.')
-      await loadDashboard()
+      await loadDashboard({ silent: true })
     } catch (error) {
       setStatusMessage(error.message)
     } finally {
-      setLoading(false)
+      setBidderStatusBusyInviteId(null)
     }
   }
 
   const recloseBid = async (row) => {
     if (!loadedBidPackageId) return
-    const confirmed = window.confirm(
-      `Reclose ${row.dealer_name} to submitted version v${row.current_version}?\n\nThis will lock invite access and keep their current submitted version in comparison.`
-    )
-    if (!confirmed) return
 
-    setLoading(true)
-    setStatusMessage('Reclosing bid to submitted version...')
+    setBidderStatusBusyInviteId(String(row.invite_id))
     try {
       await recloseInviteBid({ bidPackageId: loadedBidPackageId, inviteId: row.invite_id })
-      setStatusMessage(`Bid reclosed at v${row.current_version}. Invite locked.`)
-      await loadDashboard()
+      await loadDashboard({ silent: true })
     } catch (error) {
       setStatusMessage(error.message)
     } finally {
-      setLoading(false)
+      setBidderStatusBusyInviteId(null)
     }
   }
 
@@ -784,7 +927,8 @@ export default function PackageDashboardPage() {
         name: packageNameDraft.trim(),
         visibility: visibilityDraft,
         activeGeneralFields: activeGeneralFieldsDraft,
-        instructions: instructionsDraft
+        instructions: instructionsDraft,
+        customQuestions: customQuestionsDraft
       })
       setStatusMessage('Bid package settings saved.')
       await loadBidPackages(false)
@@ -834,17 +978,16 @@ export default function PackageDashboardPage() {
     }
   }
 
-  const approveRequirement = async (item, requirementKey) => {
+  const approveRequirement = async (item, requirementKey, componentId = null) => {
     if (!loadedBidPackageId) return
     setLoading(true)
-    setStatusMessage('Saving approval...')
     try {
       await approveSpecItemRequirement({
         bidPackageId: loadedBidPackageId,
         specItemId: item.id,
-        requirementKey
+        requirementKey,
+        componentId
       })
-      setStatusMessage('Approval saved.')
       await loadDashboard({ closeEdit: false })
     } catch (error) {
       setStatusMessage(error.message)
@@ -853,18 +996,17 @@ export default function PackageDashboardPage() {
     }
   }
 
-  const unapproveRequirement = async (item, requirementKey, actionType = 'unapproved') => {
+  const unapproveRequirement = async (item, requirementKey, actionType = 'unapproved', componentId = null) => {
     if (!loadedBidPackageId) return
     setLoading(true)
-    setStatusMessage(actionType === 'reset' ? 'Resetting requirement...' : 'Removing approval...')
     try {
       await unapproveSpecItemRequirement({
         bidPackageId: loadedBidPackageId,
         specItemId: item.id,
         requirementKey,
+        componentId,
         actionType
       })
-      setStatusMessage(actionType === 'reset' ? 'Requirement reset.' : 'Approval removed.')
       await loadDashboard({ closeEdit: false })
     } catch (error) {
       setStatusMessage(error.message)
@@ -873,22 +1015,131 @@ export default function PackageDashboardPage() {
     }
   }
 
-  const markRequirementNeedsFix = async (item, requirementKey) => {
+  const markRequirementNeedsFix = async (item, requirementKey, componentId = null) => {
     if (!loadedBidPackageId) return
     setLoading(true)
-    setStatusMessage('Marking requirement as needs fix...')
     try {
       await markSpecItemRequirementNeedsFix({
         bidPackageId: loadedBidPackageId,
         specItemId: item.id,
-        requirementKey
+        requirementKey,
+        componentId
       })
-      setStatusMessage('Requirement marked as needs fix.')
       await loadDashboard({ closeEdit: false })
     } catch (error) {
       setStatusMessage(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const createApprovalComponent = async (item) => {
+    if (!loadedBidPackageId) return
+    try {
+      const result = await createSpecItemApprovalComponent({
+        bidPackageId: loadedBidPackageId,
+        specItemId: item.id
+      })
+      const createdComponent = result?.component
+      if (createdComponent && createdComponent.id != null) {
+        setSpecItems((prev) => prev.map((specItem) => {
+          if (String(specItem.id) !== String(item.id)) return specItem
+          const current = Array.isArray(specItem.approval_components) ? specItem.approval_components : []
+          if (current.some((component) => String(component.id) === String(createdComponent.id))) {
+            return specItem
+          }
+          const nextComponents = [...current, createdComponent].sort((a, b) => Number(a?.position || 0) - Number(b?.position || 0))
+          return {
+            ...specItem,
+            approval_components: nextComponents
+          }
+        }))
+      }
+      await loadDashboard({ closeEdit: false, silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
+    }
+  }
+
+  const renameApprovalComponent = async (item, componentId, label) => {
+    if (!loadedBidPackageId) return
+    const trimmed = String(label || '').trim()
+    if (!trimmed) {
+      setStatusMessage('Sub-row label cannot be blank.')
+      return
+    }
+    setLoading(true)
+    setStatusMessage('Saving sub-row label...')
+    try {
+      await updateSpecItemApprovalComponent({
+        bidPackageId: loadedBidPackageId,
+        specItemId: item.id,
+        componentId,
+        label: trimmed
+      })
+      setStatusMessage('Sub-row label saved.')
+      await loadDashboard({ closeEdit: false })
+    } catch (error) {
+      setStatusMessage(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const removeApprovalComponent = async (item, componentId) => {
+    if (!loadedBidPackageId) return
+    try {
+      await deleteSpecItemApprovalComponent({
+        bidPackageId: loadedBidPackageId,
+        specItemId: item.id,
+        componentId
+      })
+      setSpecItems((prev) => prev.map((specItem) => {
+        if (String(specItem.id) !== String(item.id)) return specItem
+        const current = Array.isArray(specItem.approval_components) ? specItem.approval_components : []
+        return {
+          ...specItem,
+          approval_components: current.filter((component) => String(component.id) !== String(componentId))
+        }
+      }))
+      await loadDashboard({ closeEdit: false, silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
+    }
+  }
+
+  const activateApprovalComponentRequirement = async (item, componentId, requirementKey) => {
+    if (!loadedBidPackageId) return
+    setLoading(true)
+    setStatusMessage('Activating sub-row approval...')
+    try {
+      await activateSpecItemComponentRequirement({
+        bidPackageId: loadedBidPackageId,
+        specItemId: item.id,
+        componentId,
+        requirementKey
+      })
+      setStatusMessage('Sub-row approval activated.')
+      await loadDashboard({ closeEdit: false })
+    } catch (error) {
+      setStatusMessage(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const deactivateApprovalComponentRequirement = async (item, componentId, requirementKey) => {
+    if (!loadedBidPackageId) return
+    try {
+      await deactivateSpecItemComponentRequirement({
+        bidPackageId: loadedBidPackageId,
+        specItemId: item.id,
+        componentId,
+        requirementKey
+      })
+      await loadDashboard({ closeEdit: false, silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
     }
   }
 
@@ -1110,6 +1361,90 @@ export default function PackageDashboardPage() {
     }
   }
 
+  const clearBidderAwardRows = async (row) => {
+    if (!loadedBidPackageId || !row?.bid_id || Number(row.awarded_row_count || 0) <= 0) return
+
+    const dealerName = vendorDisplayName(row?.dealer_name, row?.dealer_email)
+    const selectedSpecItemIds = (specItems || [])
+      .filter((item) => String(item.awarded_bid_id || '') === String(row.bid_id))
+      .map((item) => item.id)
+    setClearBidderAwardsModal({
+      bidId: row.bid_id,
+      dealerName,
+      rowCount: selectedSpecItemIds.length,
+      selectedSpecItemIds
+    })
+  }
+
+  const confirmClearBidderAwardRows = async () => {
+    if (!loadedBidPackageId || !clearBidderAwardsModal?.bidId) return
+
+    const dealerName = clearBidderAwardsModal.dealerName
+    const bidderBidId = clearBidderAwardsModal.bidId
+    const selectedSpecItemIds = Array.isArray(clearBidderAwardsModal.selectedSpecItemIds)
+      ? clearBidderAwardsModal.selectedSpecItemIds
+      : []
+    const rowCount = selectedSpecItemIds.length
+    if (rowCount === 0) {
+      setStatusMessage('Select at least one awarded row to remove.')
+      return
+    }
+
+    setLoading(true)
+    setStatusMessage(`Removing awarded rows from ${dealerName}...`)
+    try {
+      const result = await clearAwardRows({ bidPackageId: loadedBidPackageId, specItemIds: selectedSpecItemIds })
+      const clearedIdSet = new Set(selectedSpecItemIds.map((id) => String(id)))
+      setSpecItems((prev) => prev.map((item) => (
+        clearedIdSet.has(String(item.id))
+          ? { ...item, awarded_bid_id: null, awarded_invite_id: null }
+          : item
+      )))
+      setRows((prev) => prev.map((row) => {
+        if (String(row.bid_id || '') !== String(bidderBidId)) return row
+        const nextAwardedRowCount = Math.max(0, Number(row.awarded_row_count || 0) - rowCount)
+        const nextWinnerStatus = nextAwardedRowCount === 0
+          ? null
+          : nextAwardedRowCount >= Math.max(1, Number(result?.eligible_row_count || 0))
+            ? 'sole_winner'
+            : 'partial_winner'
+        return {
+          ...row,
+          awarded_row_count: nextAwardedRowCount,
+          awarded_total_amount: null,
+          winner_status: nextWinnerStatus
+        }
+      }))
+      setLoadedPackageSettings((prev) => (
+        prev
+          ? {
+              ...prev,
+              awarded_bid_id: result?.awarded_bid_id ?? null,
+              awarded_at: result?.awarded_at ?? null,
+              package_award_status: result?.package_award_status || prev.package_award_status,
+              awarded_row_count: Number(result?.awarded_row_count || 0),
+              eligible_row_count: Number(result?.eligible_row_count || prev.eligible_row_count || 0),
+              award_winner_scope: result?.award_winner_scope || prev.award_winner_scope
+            }
+          : prev
+      ))
+      setLiveAwardSummary({
+        packageAwardStatus: result?.package_award_status || 'not_awarded',
+        awardedRowCount: Number(result?.awarded_row_count || 0),
+        eligibleRowCount: Number(result?.eligible_row_count || 0),
+        awardWinnerScope: result?.award_winner_scope || 'none'
+      })
+      setComparisonReloadToken((prev) => prev + 1)
+      setStatusMessage(`Removed ${rowCount} awarded row${rowCount === 1 ? '' : 's'} from ${dealerName}.`)
+      setClearBidderAwardsModal(null)
+      await loadDashboard({ closeEdit: false, silent: true })
+    } catch (error) {
+      setStatusMessage(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const enableApprovalsOnlyMode = () => {
     if (!loadedBidPackageId) return
     storeValue(approvalsOnlyStorageKey(loadedBidPackageId), '1')
@@ -1133,6 +1468,35 @@ export default function PackageDashboardPage() {
   }, [selectedBidPackageId])
 
   useEffect(() => {
+    if (!activePackageId) return
+    const cachedSnapshot = loadCachedDashboardSnapshot(activePackageId)
+    if (cachedSnapshot && String(loadedBidPackageId || '') !== String(activePackageId)) {
+      setRows(Array.isArray(cachedSnapshot.rows) ? cachedSnapshot.rows : [])
+      setSpecItems(Array.isArray(cachedSnapshot.specItems) ? cachedSnapshot.specItems : [])
+      setRequiredApprovalColumns(Array.isArray(cachedSnapshot.requiredApprovalColumns) ? cachedSnapshot.requiredApprovalColumns : [])
+      setCurrentAwardedBidId(cachedSnapshot.currentAwardedBidId ?? null)
+      setGeneralUploads(Array.isArray(cachedSnapshot.generalUploads) ? cachedSnapshot.generalUploads : [])
+    }
+    const cached = loadCachedPackageSettings(activePackageId)
+    if (!cached) return
+    if (String(loadedBidPackageId || '') === String(activePackageId) && loadedPackageSettings) return
+    setLoadedPackageSettings(cached)
+  }, [activePackageId, loadedBidPackageId, loadedPackageSettings])
+
+  useEffect(() => {
+    if (!activePackageId) return
+    const cached = loadCachedPackageSettings(activePackageId)
+    const cachedSnapshot = loadCachedDashboardSnapshot(activePackageId)
+    const hasCachedBidders = Array.isArray(cachedSnapshot?.rows) && cachedSnapshot.rows.length > 0
+    const storedApprovalsOnly = loadStoredValue(approvalsOnlyStorageKey(activePackageId)) === '1'
+    if (cached?.awarded_bid_id) {
+      if (approvalsOnlyMode) setApprovalsOnlyMode(false)
+      return
+    }
+    setApprovalsOnlyMode(storedApprovalsOnly && hasCachedBidders)
+  }, [activePackageId])
+
+  useEffect(() => {
     if (!loadedBidPackageId) return
     storeLineItemsViewPreferences(String(loadedBidPackageId), {
       showProductColumn,
@@ -1143,26 +1507,75 @@ export default function PackageDashboardPage() {
 
   useEffect(() => {
     if (!restoredLoadedBidPackageId) return
+    if (normalizedRouteBidPackageId) return
     if (loadedBidPackageId) return
     if (!selectedBidPackageId) return
     if (String(selectedBidPackageId) !== String(restoredLoadedBidPackageId)) return
-    if (loadingPackages || loading) return
+    if (loadingPackages) return
 
-    loadDashboard()
+    loadDashboard({ silent: true })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restoredLoadedBidPackageId, selectedBidPackageId, loadingPackages, loading])
+  }, [restoredLoadedBidPackageId, normalizedRouteBidPackageId, selectedBidPackageId, loadingPackages, loadedBidPackageId])
 
+  const packageAwardStatus = loadedPackageSettings?.package_award_status || 'not_awarded'
+  const awardWinnerScope = loadedPackageSettings?.award_winner_scope || 'none'
+  const excludedAwardRowIdSet = useMemo(
+    () => new Set((excludedAwardRowIds || []).map((id) => String(id))),
+    [excludedAwardRowIds]
+  )
+  const inScopeSpecItems = useMemo(
+    () => (specItems || []).filter((item) => !excludedAwardRowIdSet.has(String(item.id))),
+    [specItems, excludedAwardRowIdSet]
+  )
+  const inScopeEligibleRowCount = inScopeSpecItems.length
+  const inScopeAwardedItems = useMemo(
+    () => inScopeSpecItems.filter((item) => item.awarded_bid_id != null),
+    [inScopeSpecItems]
+  )
+  const inScopeAwardedRowCount = inScopeAwardedItems.length
+  const inScopeAwardCountsByBidId = useMemo(
+    () => inScopeAwardedItems.reduce((acc, item) => {
+      const key = String(item.awarded_bid_id)
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {}),
+    [inScopeAwardedItems]
+  )
+  const inScopeWinnerBidIds = Object.keys(inScopeAwardCountsByBidId)
+  const localPackageAwardStatus = inScopeEligibleRowCount === 0
+    ? 'not_awarded'
+    : inScopeAwardedRowCount === 0
+      ? 'not_awarded'
+      : inScopeAwardedRowCount >= inScopeEligibleRowCount
+        ? 'fully_awarded'
+        : 'partially_awarded'
+  const localAwardWinnerScope = inScopeWinnerBidIds.length === 0
+    ? 'none'
+    : inScopeAwardedRowCount >= inScopeEligibleRowCount && inScopeWinnerBidIds.length === 1
+      ? 'single_winner'
+      : inScopeWinnerBidIds.length > 1
+        ? 'multiple_winners'
+        : 'single_winner'
+  const effectivePackageAwardStatus = liveAwardSummary?.packageAwardStatus || localPackageAwardStatus
+  const effectiveAwardWinnerScope = liveAwardSummary?.awardWinnerScope || localAwardWinnerScope
+  const rowAwardingActive = localPackageAwardStatus !== 'not_awarded'
+  const packageFullyAwarded = effectivePackageAwardStatus === 'fully_awarded'
+  const soleWinnerActive = effectiveAwardWinnerScope === 'single_winner' && packageFullyAwarded
   const postAwardActive = Boolean(loadedPackageSettings?.awarded_bid_id)
-  const approvalTrackingActive = Boolean(postAwardActive || approvalsOnlyMode)
-  const showEmptyBiddersState = !postAwardActive && !approvalsOnlyMode && rows.length === 0
-  const currentAwardedBidIdStr = loadedPackageSettings?.awarded_bid_id != null
-    ? String(loadedPackageSettings.awarded_bid_id)
-    : null
+  const approvalTrackingActive = Boolean(packageFullyAwarded || approvalsOnlyMode)
+  const currentResolvedPackageId = normalizedRouteBidPackageId || selectedBidPackageId || loadedBidPackageId
+  const dashboardResolvedForActivePackage = Boolean(
+    currentResolvedPackageId &&
+    String(dashboardResolvedPackageId || '') === String(currentResolvedPackageId)
+  )
+  const showEmptyBiddersState = !approvalTrackingActive && !approvalsOnlyMode && dashboardResolvedForActivePackage && rows.length === 0
   const visibilityIsPublic = loadedPackageSettings?.visibility === 'public' && Boolean(loadedPackageSettings?.public_url)
   const visibleInviteRows = useMemo(() => {
-    if (!postAwardActive || !currentAwardedBidIdStr || showAllAwardedBidders) return rows
-    return rows.filter((row) => row.bid_id != null && String(row.bid_id) === currentAwardedBidIdStr)
-  }, [rows, postAwardActive, currentAwardedBidIdStr, showAllAwardedBidders])
+    if (!rowAwardingActive || showAllAwardedBidders) return rows
+    if (soleWinnerActive) return rows.filter((row) => Number(row.awarded_row_count || 0) > 0)
+    if (!packageFullyAwarded) return rows
+    return rows.filter((row) => Number(row.awarded_row_count || 0) > 0)
+  }, [rows, rowAwardingActive, soleWinnerActive, packageFullyAwarded, showAllAwardedBidders])
   const sortedInviteRows = useMemo(() => {
     const list = [...visibleInviteRows]
     const indexByInviteId = new Map(visibleInviteRows.map((row, index) => [String(row.invite_id), index]))
@@ -1253,7 +1666,7 @@ export default function PackageDashboardPage() {
   }, {})
   const refreshLineItemsSort = () => setLineItemsPendingSnapshot(buildPendingSnapshot(specItems))
   const sortedSpecItems = useMemo(() => {
-    const list = [...specItems]
+    const list = [...(approvalTrackingActive ? inScopeSpecItems : specItems)]
     const codeTagSort = (a, b) => String(a.code_tag || '').localeCompare(String(b.code_tag || ''), undefined, { numeric: true, sensitivity: 'base' })
     const snapshotPendingFor = (item) => (
       Object.prototype.hasOwnProperty.call(lineItemsPendingSnapshot, item.id)
@@ -1280,7 +1693,7 @@ export default function PackageDashboardPage() {
     }
 
     return list.sort(codeTagSort)
-  }, [specItems, approvalTrackingActive, lineItemsSort, lineItemsPendingSnapshot])
+  }, [specItems, inScopeSpecItems, approvalTrackingActive, lineItemsSort, lineItemsPendingSnapshot])
   const totalLineItemsPages = Math.max(Math.ceil(sortedSpecItems.length / normalizedLineItemsPerPage), 1)
   const lineItemsRangeStart = sortedSpecItems.length === 0 ? 0 : ((lineItemsPage - 1) * normalizedLineItemsPerPage) + 1
   const lineItemsRangeEnd = Math.min(lineItemsPage * normalizedLineItemsPerPage, sortedSpecItems.length)
@@ -1288,6 +1701,43 @@ export default function PackageDashboardPage() {
     ? `Line Items (${lineItemsRangeStart}-${lineItemsRangeEnd} of ${sortedSpecItems.length})`
     : 'Line Items In Package'
   const biddersSectionTitle = `Bidders (${visibleInviteRows.length})`
+  const clearBidderAwardItems = useMemo(() => {
+    if (!clearBidderAwardsModal?.bidId) return []
+    return (specItems || [])
+      .filter((item) => String(item.awarded_bid_id || '') === String(clearBidderAwardsModal.bidId))
+      .map((item) => ({
+        id: item.id,
+        codeTag: item.code_tag || '—',
+        productName: item.product_name || 'Untitled item',
+        brandName: item.brand_name || '',
+        quantity: item.quantity,
+        uom: item.uom || ''
+      }))
+  }, [clearBidderAwardsModal, specItems])
+
+  useEffect(() => {
+    if (!clearBidderAwardsModal) return
+    const availableIds = clearBidderAwardItems.map((item) => String(item.id))
+    const currentIds = Array.isArray(clearBidderAwardsModal.selectedSpecItemIds)
+      ? clearBidderAwardsModal.selectedSpecItemIds
+      : []
+    const nextSelected = currentIds.filter((id, index, arr) => (
+      availableIds.includes(String(id)) && arr.findIndex((entry) => String(entry) === String(id)) === index
+    ))
+    if (
+      nextSelected.length === currentIds.length &&
+      Number(clearBidderAwardsModal.rowCount || 0) === nextSelected.length
+    ) return
+    setClearBidderAwardsModal((prev) => (
+      prev
+        ? {
+            ...prev,
+            selectedSpecItemIds: nextSelected,
+            rowCount: nextSelected.length
+          }
+        : prev
+    ))
+  }, [clearBidderAwardsModal, clearBidderAwardItems])
   const renderVendorPicker = () => (
     <div className="vendor-picker" ref={vendorPickerRef}>
       <button
@@ -1440,6 +1890,26 @@ export default function PackageDashboardPage() {
     ),
     [specItems]
   )
+  const approvalComponentsBySpecItem = useMemo(
+    () => Object.fromEntries(
+      (specItems || []).map((item) => [String(item.id), item.approval_components || []])
+    ),
+    [specItems]
+  )
+  const initialComparisonRows = useMemo(() => (
+    (specItems || []).map((item) => ({
+      spec_item_id: item.id,
+      sku: item.code_tag,
+      product_name: item.product_name,
+      manufacturer: item.brand_name,
+      quantity: item.quantity,
+      uom: item.uom,
+      active: item.active,
+      awarded_bid_id: item.awarded_bid_id,
+      awarded_invite_id: item.awarded_invite_id,
+      dealers: []
+    }))
+  ), [specItems])
   const lineItemUploadsBySpecItem = useMemo(
     () => Object.fromEntries(
       (specItems || []).map((item) => [String(item.id), item.uploads || []])
@@ -1503,6 +1973,11 @@ export default function PackageDashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedBidPackageId, lineItemsSort, approvalTrackingActive])
 
+  const packageCustomQuestions = useMemo(
+    () => normalizeCustomQuestions(loadedPackageSettings?.custom_questions || loadedPackageRecord?.custom_questions || []),
+    [loadedPackageRecord, loadedPackageSettings]
+  )
+
   return (
     <div className="stack">
       <SectionCard className="section-card-flat package-detail-header-card">
@@ -1542,12 +2017,12 @@ export default function PackageDashboardPage() {
         {statusMessage ? <p className="text-muted">{statusMessage}</p> : null}
       </SectionCard>
 
-      {!(approvalsOnlyMode && !postAwardActive) ? (
+      {!(approvalsOnlyMode && !approvalTrackingActive) ? (
       <SectionCard className="section-card-flat bidders-flat">
         <div style={{ maxWidth: '985px' }}>
           <div className="bidders-head-row">
             <h2>{biddersSectionTitle}</h2>
-            {!postAwardActive && !approvalsOnlyMode && !showEmptyBiddersState ? (
+            {!approvalTrackingActive && !approvalsOnlyMode && !showEmptyBiddersState ? (
               <div className="bidders-head-actions">
                 <label className="bidders-sort-control">
                   <span className="bidders-sort-label">Sort By</span>
@@ -1565,7 +2040,7 @@ export default function PackageDashboardPage() {
                 </label>
               </div>
             ) : null}
-            {!postAwardActive && approvalsOnlyMode ? (
+            {!approvalTrackingActive && approvalsOnlyMode ? (
               <div className="bidders-head-actions">
                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>Approvals-only mode</span>
               </div>
@@ -1576,35 +2051,44 @@ export default function PackageDashboardPage() {
               <tr>
                 <th style={{ width: '200px' }} className="data-table-col-head">Vendor</th>
                 <th style={{ width: '110px' }} className="data-table-col-head">Status</th>
-                <th style={{ width: '240px' }} className="data-table-col-head">Snapshot</th>
+                <th style={{ width: '110px' }} className="data-table-col-head">Questions</th>
+                <th style={{ width: '240px' }} className="data-table-col-head">Bid Snapshot</th>
                 <th style={{ width: '160px' }} className="data-table-col-head">Total</th>
                 <th style={{ width: '60px', textAlign: 'right' }} className="data-table-col-head"></th>
               </tr>
             </thead>
             <tbody>
               {sortedInviteRows.map((row) => {
-                const effectiveSelectionStatus = postAwardActive
-                  ? (row.bid_id != null && String(row.bid_id) === currentAwardedBidIdStr ? 'awarded' : 'not_selected')
-                  : row.selection_status
+                const inScopeAwardedRowCountForBid = row.bid_id != null ? Number(inScopeAwardCountsByBidId[String(row.bid_id)] || 0) : 0
+                const hasResolvedInScopeAwards = inScopeAwardedRowCount > 0
+                const localWinnerStatus = inScopeAwardedRowCountForBid === 0
+                  ? null
+                  : inScopeEligibleRowCount > 0 && inScopeAwardedRowCountForBid === inScopeEligibleRowCount
+                    ? 'sole_winner'
+                    : 'partial_winner'
+                const winnerMeta = winnerStatusMeta(localWinnerStatus)
+                const isLoser = packageFullyAwarded && hasResolvedInScopeAwards && inScopeAwardedRowCountForBid === 0
+                const isWinnerRow = inScopeAwardedRowCountForBid > 0
                 const isNotStarted = row.status === 'not_started'
                 const completionPct = Math.max(0, Math.min(100, Number(row.completion_pct ?? 0)))
                 const isFullyComplete = completionPct >= 100
-                const minTotal = numberOrNull(row.min_total_amount)
-                const maxTotal = numberOrNull(row.max_total_amount)
-                const minLabel = compactMoney(minTotal)
-                const maxLabel = compactMoney(maxTotal)
-                const totalDisplay = postAwardActive
-                  ? totalLabel(row, { postAwardActive })
-                  : (minTotal != null && maxTotal != null
-                    ? (minLabel === maxLabel ? minLabel : `${minLabel}-${maxLabel}`)
-                    : compactMoney(row.latest_total_amount))
+                const totalDisplay = totalDisplayMeta(row, { showAwardedTotals: rowAwardingActive })
                 const isComparisonVisible = comparisonVisibleInviteIdSet.has(String(row.invite_id))
+                const questionResponses = packageCustomQuestions.map((question) => {
+                  const response = row.custom_question_responses?.[question.id]
+                  return {
+                    id: question.id,
+                    label: question.label,
+                    value: String(response || '').trim()
+                  }
+                })
+                const answeredQuestionCount = questionResponses.filter((entry) => entry.value).length
                 return (
                   <tr key={row.invite_id} className={isNotStarted ? 'bidder-row-muted' : ''}>
                     <td className="bidder-vendor-cell">
                       <div className="bidder-vendor-topline">
                         <span className="bidder-controls">
-                          {!postAwardActive ? (
+                          {!approvalTrackingActive ? (
                             <input
                               type="checkbox"
                               className="comparison-visibility-checkbox"
@@ -1696,42 +2180,45 @@ export default function PackageDashboardPage() {
                       </div>
                     </td>
                     <td className="bidder-status-column">
-                      {postAwardActive && effectiveSelectionStatus === 'awarded' ? (
+                      {isWinnerRow ? (
                         <div className="bidder-status-cell bidder-status-cell-awarded">
-                          <span className="bidder-status-chip-awarded">Awarded</span>
+                          <span className="bidder-status-chip-awarded">{winnerMeta?.label || 'Sole Winner'}</span>
                           <button
                             type="button"
                             className="bidder-status-unaward-btn"
-                            title="Remove award"
-                            onClick={() => openClearAwardModal(row)}
+                            title={`Remove ${inScopeAwardedRowCountForBid || 0} awarded row${Number(inScopeAwardedRowCountForBid || 0) === 1 ? '' : 's'}`}
+                            onClick={() => clearBidderAwardRows(row)}
                             disabled={loading}
-                            aria-label="Remove award"
+                            aria-label={`Remove awarded rows for ${vendorDisplayName(row.dealer_name, row.dealer_email)}`}
                           >
                             ×
                           </button>
                         </div>
                       ) : null}
-                      {postAwardActive && effectiveSelectionStatus === 'not_selected' ? (
-                        <div className="bidder-status-cell">
-                          <span className="bidder-status-main status-tone-neutral">Lost</span>
+                      {!isWinnerRow && isLoser ? (
+                        <div className="bidder-status-cell bidder-status-cell-awarded">
+                          <span className="bidder-status-chip-lost">Lost</span>
                         </div>
                       ) : null}
-                      {!postAwardActive && row.status === 'submitted' ? (
+                      {!isWinnerRow && !isLoser && row.status === 'submitted' ? (
                         <div className="bidder-status-cell">
                           <span className="bidder-status-main status-tone-submitted">Submitted</span>
                           <button
                             type="button"
                             className="bidder-status-action"
-                            title="Click to reopen bid"
-                            onClick={() => reopenBid(row.invite_id)}
-                            disabled={loading}
+                            title={row.can_reopen ? 'Click to reopen bid' : (row.reopen_block_reason || 'Cannot reopen this bid')}
+                            onClick={() => {
+                              if (!row.can_reopen) return
+                              reopenBid(row.invite_id)
+                            }}
+                            disabled={loading || !row.can_reopen || bidderStatusBusyInviteId === String(row.invite_id)}
                           >
                             <img src={reopenIcon} alt="" aria-hidden="true" />
                             <span>Re-open</span>
                           </button>
                         </div>
                       ) : null}
-                      {!postAwardActive && row.status === 'in_progress' && row.current_version > 0 ? (
+                      {!approvalTrackingActive && row.status === 'in_progress' && row.current_version > 0 ? (
                         <div className="bidder-status-cell">
                           <span className="bidder-status-main status-tone-warning">In progress</span>
                           <button
@@ -1739,23 +2226,61 @@ export default function PackageDashboardPage() {
                             className="bidder-status-action bidder-status-action-lock"
                             title="Click to lock bid"
                             onClick={() => recloseBid(row)}
-                            disabled={loading}
+                            disabled={loading || bidderStatusBusyInviteId === String(row.invite_id)}
                           >
                             <img src={lockIcon} alt="" aria-hidden="true" />
                             <span>Lock</span>
                           </button>
                         </div>
                       ) : null}
-                      {!postAwardActive && row.status === 'in_progress' && row.current_version === 0 ? (
+                      {!approvalTrackingActive && row.status === 'in_progress' && row.current_version === 0 ? (
                         <div className="bidder-status-cell">
                           <span className="bidder-status-main status-tone-warning">In progress</span>
                         </div>
                       ) : null}
-                      {!postAwardActive && row.status === 'not_started' ? (
+                      {!approvalTrackingActive && row.status === 'not_started' ? (
                         <div className="bidder-status-cell">
                           <span className="bidder-status-main status-tone-neutral">No Activity</span>
                         </div>
                       ) : null}
+                    </td>
+                    <td className="bidder-questions-column">
+                      {packageCustomQuestions.length > 0 ? (
+                        <div className="bidder-questions-cell">
+                          <span className="bidder-questions-count">
+                            {`${answeredQuestionCount}/${packageCustomQuestions.length}`}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn bidder-questions-view-btn"
+                            title="View question responses"
+                            onClick={() => {
+                              setBidderQuestionsModal({
+                                dealerName: vendorDisplayName(row.dealer_name, row.dealer_email),
+                                answeredCount: answeredQuestionCount,
+                                totalCount: packageCustomQuestions.length,
+                                responses: questionResponses
+                              })
+                            }}
+                            disabled={loading}
+                            aria-label="View bidder question responses"
+                          >
+                            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                              <path
+                                d="M8 2.1c-3.3 0-6 2.1-6 4.8 0 1.5.8 2.9 2.2 3.8l-.4 2.4 2.5-1.3c.5.1 1 .1 1.7.1 3.3 0 6-2.1 6-4.8s-2.7-5-6-5Z"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path d="M5.3 6.9h5.4M5.3 8.9h3.8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="bidder-questions-empty">—</span>
+                      )}
                     </td>
                     <td className="bidder-snapshot-cell">
                       {isNotStarted ? (
@@ -1786,8 +2311,9 @@ export default function PackageDashboardPage() {
                     </td>
                     <td className="bidder-total-column">
                       <div className="bidder-total-main">
-                        {totalDisplay}
+                        {totalDisplay.primary}
                       </div>
+                      {totalDisplay.secondary ? <div className="bidder-total-subline">{totalDisplay.secondary}</div> : null}
                       {!isNotStarted && (row.submitted_at || row.last_saved_at) ? (
                         <div className="bidder-version-cell">
                           <div className="bidder-version-line">
@@ -1888,8 +2414,8 @@ export default function PackageDashboardPage() {
               })}
               {sortedInviteRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className={`text-muted ${showEmptyBiddersState ? 'bidders-empty-copy' : ''}`.trim()}>
-                    {postAwardActive
+                  <td colSpan={6} className={`text-muted ${showEmptyBiddersState ? 'bidders-empty-copy' : ''}`.trim()}>
+                    {approvalTrackingActive
                       ? 'No awarded bidder found.'
                       : showEmptyBiddersState
                         ? 'No bidders yet. Add your first bidder using the module below or skip to approvals if you outsource project bidding.'
@@ -1901,16 +2427,16 @@ export default function PackageDashboardPage() {
           </table>
         </div>
         <div className={`action-row bidders-footer-actions ${showEmptyBiddersState ? 'bidders-footer-empty' : ''}`.trim()}>
-          {postAwardActive && rows.length > 1 ? (
+          {(soleWinnerActive || packageFullyAwarded) && rows.some((row) => Number(row.awarded_row_count || 0) === 0) ? (
             <button
               className="btn btn-primary"
               onClick={() => setShowAllAwardedBidders((prev) => !prev)}
               disabled={!loadedBidPackageId || loading}
             >
-              {showAllAwardedBidders ? 'View Winner Only' : 'View All'}
+              {showAllAwardedBidders ? 'Show Winners Only' : 'Show All'}
             </button>
           ) : null}
-          {!postAwardActive && !approvalsOnlyMode && showAddBidderForm ? (
+          {!approvalTrackingActive && !approvalsOnlyMode && showAddBidderForm ? (
             <div className="bidder-add-head-inline">
               <button
                 className="btn bidder-add-cancel-btn"
@@ -1943,7 +2469,7 @@ export default function PackageDashboardPage() {
               </button>
             </div>
           ) : null}
-          {!postAwardActive && !showAddBidderForm && !showEmptyBiddersState ? (
+          {!approvalTrackingActive && !showAddBidderForm && !showEmptyBiddersState ? (
             <button
               className="btn bidder-add-link-btn"
               onClick={() => {
@@ -1983,7 +2509,7 @@ export default function PackageDashboardPage() {
               <button
                 className="btn bidders-empty-skip-btn"
                 onClick={enableApprovalsOnlyMode}
-                disabled={!loadedBidPackageId || loading}
+                disabled={!currentResolvedPackageId || loading}
               >
                 <span>Skip to approvals</span>
                 <span className="bidders-empty-skip-icon" aria-hidden="true">➜</span>
@@ -1991,7 +2517,7 @@ export default function PackageDashboardPage() {
             </>
           ) : null}
         </div>
-        {!postAwardActive && !approvalsOnlyMode && showAddBidderForm && showCreateVendorPanel ? (
+        {!approvalTrackingActive && !approvalsOnlyMode && showAddBidderForm && showCreateVendorPanel ? (
           <div className="bidder-create-vendor-row">
             {renderCreateVendorPanel()}
           </div>
@@ -2003,7 +2529,7 @@ export default function PackageDashboardPage() {
         ) : null}
       </SectionCard>
       ) : null}
-      {loadedBidPackageId ? (
+      {activePackageId ? (
         <>
           {historyView ? (
             <div className="comparison-history-banner">
@@ -2024,15 +2550,22 @@ export default function PackageDashboardPage() {
           ) : null}
           <ComparisonPage
             embedded
-            bidPackageId={loadedBidPackageId}
+            bidPackageId={activePackageId}
+            initialRows={approvalTrackingActive ? initialComparisonRows : []}
             allowItemManagement={!approvalTrackingActive}
             awardedWorkspace={approvalTrackingActive}
             requiredApprovalColumns={approvalTrackingActive ? requiredApprovalColumns : []}
             requiredApprovalsBySpecItem={approvalTrackingActive ? requiredApprovalsBySpecItem : {}}
+            approvalComponentsBySpecItem={approvalTrackingActive ? approvalComponentsBySpecItem : {}}
             lineItemUploadsBySpecItem={approvalTrackingActive ? lineItemUploadsBySpecItem : {}}
-            onApproveRequirement={approvalTrackingActive ? ({ specItemId, requirementKey }) => approveRequirement({ id: specItemId }, requirementKey) : null}
-            onUnapproveRequirement={approvalTrackingActive ? ({ specItemId, requirementKey, actionType }) => unapproveRequirement({ id: specItemId }, requirementKey, actionType) : null}
-            onNeedsFixRequirement={approvalTrackingActive ? ({ specItemId, requirementKey }) => markRequirementNeedsFix({ id: specItemId }, requirementKey) : null}
+            onApproveRequirement={approvalTrackingActive ? ({ specItemId, requirementKey, componentId }) => approveRequirement({ id: specItemId }, requirementKey, componentId) : null}
+            onUnapproveRequirement={approvalTrackingActive ? ({ specItemId, requirementKey, actionType, componentId }) => unapproveRequirement({ id: specItemId }, requirementKey, actionType, componentId) : null}
+            onNeedsFixRequirement={approvalTrackingActive ? ({ specItemId, requirementKey, componentId }) => markRequirementNeedsFix({ id: specItemId }, requirementKey, componentId) : null}
+            onCreateApprovalComponent={approvalTrackingActive ? ({ specItemId }) => createApprovalComponent({ id: specItemId }) : null}
+            onRenameApprovalComponent={approvalTrackingActive ? ({ specItemId, componentId, label }) => renameApprovalComponent({ id: specItemId }, componentId, label) : null}
+            onDeleteApprovalComponent={approvalTrackingActive ? ({ specItemId, componentId }) => removeApprovalComponent({ id: specItemId }, componentId) : null}
+            onActivateComponentRequirement={approvalTrackingActive ? ({ specItemId, componentId, requirementKey }) => activateApprovalComponentRequirement({ id: specItemId }, componentId, requirementKey) : null}
+            onDeactivateComponentRequirement={approvalTrackingActive ? ({ specItemId, componentId, requirementKey }) => deactivateApprovalComponentRequirement({ id: specItemId }, componentId, requirementKey) : null}
             onOpenLineItemFiles={approvalTrackingActive ? ({ specItemId, codeTag, productName, brandName, uploads = [] }) => {
               setLineItemUploadFile(null)
               setLineItemUploadRequirementKey('')
@@ -2054,12 +2587,15 @@ export default function PackageDashboardPage() {
             onAwardChanged={async () => {
               await loadDashboard({ closeEdit: false })
             }}
+            onExcludedRowsChanged={setExcludedAwardRowIds}
+            onAwardSummaryChanged={setLiveAwardSummary}
+            reloadToken={comparisonReloadToken}
             forcedVisibleDealerIds={approvalTrackingActive ? null : comparisonVisibleInviteIds}
             historyView={historyView}
             onExitHistoryView={() => setHistoryView(null)}
-            lineItemsHeaderActionLabel={!postAwardActive && approvalsOnlyMode ? 'Invite Bidders' : ''}
-            onLineItemsHeaderAction={!postAwardActive && approvalsOnlyMode ? inviteBiddersFromApprovals : null}
-            lineItemsHeaderActionDisabled={!loadedBidPackageId || loading}
+            lineItemsHeaderActionLabel={!approvalTrackingActive && approvalsOnlyMode ? 'Invite Bidders' : ''}
+            onLineItemsHeaderAction={!approvalTrackingActive && approvalsOnlyMode ? inviteBiddersFromApprovals : null}
+            lineItemsHeaderActionDisabled={!activePackageId || loading}
           />
         </>
       ) : (
@@ -2254,6 +2790,140 @@ export default function PackageDashboardPage() {
             </p>
             <button type="button" className="btn award-modal-remove-btn" onClick={clearAwardForPackage} disabled={loading}>
               Remove Award
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {bidderQuestionsModal ? (
+        <div className="modal-backdrop" onClick={() => setBidderQuestionsModal(null)}>
+          <div className="modal-card bidder-questions-modal-card" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="bidder-questions-modal-close"
+              onClick={() => setBidderQuestionsModal(null)}
+              aria-label="Close question responses modal"
+            >
+              ×
+            </button>
+            <h3>Question Responses</h3>
+            <p className="bidder-questions-modal-subtitle">
+              {`${bidderQuestionsModal.dealerName} • ${bidderQuestionsModal.answeredCount} of ${bidderQuestionsModal.totalCount}`}
+            </p>
+            <div className="bidder-questions-modal-list">
+              {(bidderQuestionsModal.responses || []).map((entry) => (
+                <div key={`bidder-question-${entry.id}`} className="bidder-questions-modal-item">
+                  <div className="bidder-questions-modal-label">{entry.label}</div>
+                  <div className="bidder-questions-modal-value">{entry.value || '—'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {clearBidderAwardsModal ? (
+        <div className="modal-backdrop" onClick={() => setClearBidderAwardsModal(null)}>
+          <div className="modal-card award-modal-card award-modal-card-remove" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="award-modal-close-dot"
+              onClick={() => setClearBidderAwardsModal(null)}
+              disabled={loading}
+              aria-label="Close remove bidder awards modal"
+            >
+              ×
+            </button>
+            <h3>Remove awarded rows</h3>
+            <p className="award-modal-remove-copy">
+              {`Choose which row${clearBidderAwardItems.length === 1 ? '' : 's'} to remove from ${clearBidderAwardsModal.dealerName}.`}
+            </p>
+            <div className="award-modal-remove-toolbar">
+              <button
+                type="button"
+                className="btn award-modal-remove-toggle"
+                onClick={() => {
+                  const allSelected = clearBidderAwardItems.length > 0
+                    && Number(clearBidderAwardsModal.rowCount || 0) === clearBidderAwardItems.length
+                  setClearBidderAwardsModal((prev) => (
+                    prev
+                      ? {
+                          ...prev,
+                          selectedSpecItemIds: allSelected ? [] : clearBidderAwardItems.map((item) => item.id),
+                          rowCount: allSelected ? 0 : clearBidderAwardItems.length
+                        }
+                      : prev
+                  ))
+                }}
+                disabled={loading || clearBidderAwardItems.length === 0}
+              >
+                <span
+                  className={`award-modal-remove-toggle-check ${clearBidderAwardItems.length > 0
+                  && Number(clearBidderAwardsModal.rowCount || 0) === clearBidderAwardItems.length
+                    ? 'is-checked'
+                    : ''}`.trim()}
+                  aria-hidden="true"
+                />
+                <span>
+                  {clearBidderAwardItems.length > 0
+                  && Number(clearBidderAwardsModal.rowCount || 0) === clearBidderAwardItems.length
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </span>
+              </button>
+              <span className="award-modal-remove-count">
+                {`${clearBidderAwardsModal.rowCount || 0} Selected`}
+              </span>
+            </div>
+            <div className="award-modal-remove-list">
+              {clearBidderAwardItems.map((item) => {
+                const checked = clearBidderAwardsModal.selectedSpecItemIds?.some((id) => String(id) === String(item.id))
+                const quantityLabel = item.quantity ? `${item.quantity}${item.uom ? ` ${item.uom}` : ''}` : '—'
+                return (
+                  <label key={`clear-award-item-${item.id}`} className="award-modal-remove-item">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checked)}
+                      onChange={(event) => {
+                        const nextChecked = event.target.checked
+                        setClearBidderAwardsModal((prev) => {
+                          if (!prev) return prev
+                          const current = Array.isArray(prev.selectedSpecItemIds) ? prev.selectedSpecItemIds : []
+                          const nextSelected = nextChecked
+                            ? (current.some((id) => String(id) === String(item.id)) ? current : [...current, item.id])
+                            : current.filter((id) => String(id) !== String(item.id))
+                          return {
+                            ...prev,
+                            selectedSpecItemIds: nextSelected,
+                            rowCount: nextSelected.length
+                          }
+                        })
+                      }}
+                      disabled={loading}
+                    />
+                    <span className="award-modal-remove-item-body">
+                      <span className="award-modal-remove-item-line">
+                        <span className="award-modal-remove-item-details">
+                          <span className="award-modal-remove-item-title">{item.codeTag}</span>
+                          <span className="award-modal-remove-item-meta">
+                            {item.productName}
+                            {item.brandName ? ` - ${item.brandName}` : ''}
+                          </span>
+                        </span>
+                        <span className="award-modal-remove-item-qty">{quantityLabel}</span>
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              className="btn award-modal-remove-btn"
+              onClick={confirmClearBidderAwardRows}
+              disabled={loading || Number(clearBidderAwardsModal.rowCount || 0) === 0}
+            >
+              {`Remove ${clearBidderAwardsModal.rowCount || 0} Awarded Row${Number(clearBidderAwardsModal.rowCount || 0) === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>

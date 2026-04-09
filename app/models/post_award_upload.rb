@@ -3,6 +3,7 @@ require 'securerandom'
 
 class PostAwardUpload < ApplicationRecord
   STORAGE_ROOT = Rails.root.join('storage', 'post_award_uploads').freeze
+  SUBSTITUTION_ROW_REQUIREMENT_KEY = '__substitution_row__'.freeze
 
   belongs_to :bid_package
   belongs_to :spec_item, optional: true
@@ -11,6 +12,30 @@ class PostAwardUpload < ApplicationRecord
   enum uploader_role: { vendor: 0, designer: 1 }
 
   validates :file_name, presence: true
+
+  def self.supports_substitution_flag?
+    column_names.include?('is_substitution')
+  rescue StandardError
+    false
+  end
+
+  def substitution_upload?
+    return ActiveModel::Type::Boolean.new.cast(self[:is_substitution]) if self.class.supports_substitution_flag?
+
+    requirement_key.to_s == SUBSTITUTION_ROW_REQUIREMENT_KEY
+  end
+
+  def is_substitution
+    substitution_upload?
+  end
+
+  def is_substitution?
+    substitution_upload?
+  end
+
+  def api_requirement_key
+    requirement_key.to_s == SUBSTITUTION_ROW_REQUIREMENT_KEY ? nil : requirement_key
+  end
 
   def persist_uploaded_file!(uploaded_file)
     return unless uploaded_file.respond_to?(:read)

@@ -60,7 +60,11 @@ module CsvImports
         normalized['spec_item_id'] = normalized['spec_item_id'].presence || SecureRandom.uuid
 
         quantity = parse_quantity(normalized['quantity'])
-        errors << "Row #{idx + 2}: quantity must be numeric and >= 0" if quantity.nil? || quantity < 0
+        if normalized['quantity'].present? && quantity.nil?
+          errors << "Row #{idx + 2}: quantity must be numeric and >= 0"
+        elsif quantity.present? && quantity < 0
+          errors << "Row #{idx + 2}: quantity must be numeric and >= 0"
+        end
 
         required_fields_for(profile).each do |field|
           next if field == 'quantity'
@@ -125,7 +129,6 @@ module CsvImports
     def apply_profile_defaults!(row, profile)
       return unless profile == 'designer_pages'
 
-      row['quantity'] = '1' if row['quantity'].blank?
       row['uom'] = 'EA' if row['uom'].blank?
       row['product_name'] = "Product #{row['spec_item_id']}" if row['product_name'].blank? && row['spec_item_id'].present?
       row['sku'] = row['spec_item_id'].to_s if row['sku'].blank? && row['spec_item_id'].present?

@@ -138,12 +138,15 @@ This document summarizes what has been implemented in the Bid Collections app so
 ## Technical Additions (Recent)
 
 ### Migrations
-- `20260226163000_add_active_to_spec_items.rb`
-- `20260226170000_change_lead_time_days_to_string.rb`
-- `20260301000500_add_comparison_snapshot_to_bid_award_events.rb`
+- Recent engine-safe migration names use the `bid_collections_` prefix.
+- Examples:
+  - `20260226163000_bid_collections_add_active_to_spec_items.rb`
+  - `20260226170000_bid_collections_change_lead_time_days_to_string.rb`
+  - `20260301000500_bid_collections_add_comparison_snapshot_to_bid_award_events.rb`
 
 ### Local Dev / Legacy Runtime Notes (Ruby 2.4.5 + Rails 5.2)
 - This repo targets Ruby `2.4.5` and Rails `5.2.8.x`; avoid Rails 7+ APIs (e.g. `primary_abstract_class`, `enum :field`, `Struct keyword_init`).
+- The frontend target is React `17.x`; keep host-app embedding expectations aligned with that version line.
 - MySQL FK types must match exactly; some environments use integer PKs (legacy) while newer Rails defaults to bigint. Migrations should reference the actual PK type when creating FKs.
 - Import flow prerequisites:
   - A `Project` must exist/selected before CSV preview can run.

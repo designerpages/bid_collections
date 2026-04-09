@@ -1,6 +1,20 @@
 module Awards
   class BidPackageAwardService
-    Result = Struct.new(:success?, :bid_package, :bid_award_event, :error_key, :errors, keyword_init: true)
+    class Result
+      attr_reader :bid_package, :bid_award_event, :error_key, :errors
+
+      def initialize(success:, bid_package: nil, bid_award_event: nil, error_key: nil, errors: nil)
+        @success = success
+        @bid_package = bid_package
+        @bid_award_event = bid_award_event
+        @error_key = error_key
+        @errors = errors
+      end
+
+      def success?
+        @success
+      end
+    end
 
     def initialize(bid_package:, bid:, awarded_by:, note: nil, allow_reassign: false, awarded_amount_snapshot: nil, comparison_snapshot: nil)
       @bid_package = bid_package
@@ -53,7 +67,7 @@ module Awards
         )
       end
 
-      Result.new(success?: true, bid_package: @bid_package, bid_award_event: bid_award_event)
+      Result.new(success: true, bid_package: @bid_package, bid_award_event: bid_award_event)
     rescue ActiveRecord::RecordInvalid => e
       failure(:invalid_record, e.record.errors.full_messages)
     end
@@ -72,7 +86,7 @@ module Awards
     end
 
     def failure(error_key, errors)
-      Result.new(success?: false, error_key: error_key, errors: Array(errors))
+      Result.new(success: false, error_key: error_key, errors: Array(errors))
     end
 
     def normalized_comparison_snapshot(snapshot)

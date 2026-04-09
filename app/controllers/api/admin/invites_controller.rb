@@ -54,6 +54,12 @@ module Api
           return render json: { error: 'Only submitted bids can be reopened' }, status: :conflict
         end
 
+        if bid_has_awarded_rows?(bid)
+          return render json: {
+            error: 'Cannot reopen this bidder because they have awarded rows. Reassign or clear those awards first.'
+          }, status: :conflict
+        end
+
         bid.update!(
           state: :draft,
           submitted_at: nil,
@@ -156,7 +162,7 @@ module Api
 
         invites.each do |invite|
           bid = invite.bid
-          if bid&.submitted?
+          if bid&.submitted? && !bid_has_awarded_rows?(bid)
             bid.update!(
               state: :draft,
               submitted_at: nil,
@@ -199,6 +205,18 @@ module Api
         ids = Array(params[:invite_ids]).map(&:to_i).uniq
         scope = @bid_package.invites
         ids.any? ? scope.where(id: ids) : scope.none
+      end
+
+      def bid_has_awarded_rows?(bid)
+        return false unless bid
+
+        scope = @bid_package.bid_row_awards
+                            .where(bid_id: bid.id)
+                            .joins(:spec_item)
+                            .merge(@bid_package.spec_items.active)
+        excluded_spec_item_ids = @bid_package.excluded_spec_item_ids
+        scope = scope.where.not(spec_item_id: excluded_spec_item_ids) if excluded_spec_item_ids.any?
+        scope.exists?
       end
     end
   end

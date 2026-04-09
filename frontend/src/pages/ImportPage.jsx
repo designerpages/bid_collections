@@ -20,6 +20,13 @@ const GENERAL_PRICING_FIELDS = [
   { key: 'sales_tax_amount', label: 'Sales Tax' }
 ]
 
+function createQuestionDraft() {
+  return {
+    id: `question_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    label: ''
+  }
+}
+
 function readFileText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -48,6 +55,7 @@ export default function ImportPage() {
   const [visibility, setVisibility] = useState('private')
   const [instructions, setInstructions] = useState('')
   const [activeGeneralFields, setActiveGeneralFields] = useState([])
+  const [customQuestions, setCustomQuestions] = useState([])
 
   const [previewResult, setPreviewResult] = useState(null)
   const [previewErrors, setPreviewErrors] = useState([])
@@ -221,7 +229,8 @@ export default function ImportPage() {
         sourceProfile: 'designer_pages',
         visibility,
         activeGeneralFields,
-        instructions
+        instructions,
+        customQuestions: customQuestions.filter((question) => String(question.label || '').trim())
       })
       setCreateResult(result)
       setStatusMessage(`Bid package ${result.bid_package.id} created with ${result.imported_items_count} items.`)
@@ -439,6 +448,51 @@ export default function ImportPage() {
                           placeholder="Optional bidder instructions..."
                         />
                       </label>
+                    </div>
+
+                    <div className="import-step2-pricing-group">
+                      <div className="package-list-custom-head">
+                        <p className="text-muted import-step2-pricing-title" style={{ margin: 0 }}>Custom Questions</p>
+                      </div>
+                      {customQuestions.length === 0 ? (
+                        <p className="text-muted" style={{ marginTop: '0.45rem' }}>Add package-level bidder questions such as purchasing network or contract vehicle.</p>
+                      ) : (
+                        <div className="package-questions-editor">
+                          {customQuestions.map((question, index) => (
+                            <div key={question.id} className="package-question-editor-row">
+                              <span className="package-question-editor-index">{index + 1}</span>
+                              <input
+                                type="text"
+                                value={question.label}
+                                placeholder="What purchasing network are you utilizing?"
+                                onChange={(event) => {
+                                  const nextLabel = event.target.value
+                                  setCustomQuestions((prev) => prev.map((entry) => (
+                                    entry.id === question.id ? { ...entry, label: nextLabel } : entry
+                                  )))
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="package-question-editor-remove"
+                                onClick={() => setCustomQuestions((prev) => prev.filter((entry) => entry.id !== question.id))}
+                                disabled={loading}
+                                aria-label={`Remove question ${index + 1}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="package-question-add-link"
+                        onClick={() => setCustomQuestions((prev) => [...prev, createQuestionDraft()])}
+                        disabled={loading}
+                      >
+                        + Add Question
+                      </button>
                     </div>
 
                     <div className="action-row import-step2-actions">
