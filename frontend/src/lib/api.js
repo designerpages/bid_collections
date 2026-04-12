@@ -89,6 +89,15 @@ export async function dpResolveContext({ firmId, projectName, projectNumber }) {
   })
 }
 
+/** DP lightbox embed: GET context by firm + DP project id (see BID_COLLECTIONS_DP_EMBED_CONTEXT.md). */
+export async function dpResolveContextEmbed({ firmId, projectId }) {
+  const q = new URLSearchParams({
+    firm_id: String(firmId),
+    project_id: String(projectId)
+  })
+  return request(`/api/dp/context?${q.toString()}`, { method: 'GET' })
+}
+
 export async function dpFetchProjectBidPackages({ projectId }) {
   return request(`/api/dp/projects/${projectId}/bid_packages`)
 }

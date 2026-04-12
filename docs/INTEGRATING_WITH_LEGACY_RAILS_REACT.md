@@ -85,12 +85,17 @@ In standalone mode, Bid Collections can proxy those DP calls:
 
 The frontend will call Bid Collections proxy endpoints:
 
-- `POST /api/dp/context`
+- `GET /api/dp/context?firm_id=&project_id=` (Designer Pages lightbox embed; see `docs/BID_COLLECTIONS_DP_EMBED_CONTEXT.md`)
+- `POST /api/dp/context` (standalone query-string flow: `firm_id`, `project_name`, optional `project_number`)
 - `GET /api/dp/projects/:project_id/bid_packages`
 - `POST /api/dp/projects/:project_id/bid_packages/:package_id/selection`
 - `POST /api/dp/projects/:project_id/specs/batch`
 
 Bid Collections will sign and forward requests to DP’s `/api/v2/bid_collections/**` endpoints.
+
+#### DP lightbox embed (`BidCollectionsApp`)
+
+Mount the library export `BidCollectionsApp` from `@bid-collections/ui` with `router="memory"`, `basename="/bid_collections"`, `initialPath="/import"`, and optionally `dpEmbedContext={{ projectId, firmId, projectName, projectProductIds }}`. Until the host passes that prop, BC also reads `window.__DP_BID_COLLECTIONS_CONTEXT__` (same shape). When embed context includes `projectProductIds`, Import defaults to **Use selected specs from project** and still offers **Import from CSV instead**. Full-page loads without context keep the previous CSV / BC project behavior when `VITE_DP_INTEGRATION=1` but no embed and no `firm_id` / `project_name` query params.
 
 ### 2) Run the React app from this repository
 

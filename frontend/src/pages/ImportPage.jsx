@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import SectionCard from '../components/SectionCard'
+import { useDpEmbedContext } from '../context/DpEmbedContext'
+import { designerPagesCsvFromDpSpecItems } from '../lib/dpSpecsCsv'
 import {
   createBidPackage,
   dpFetchProjectBidPackages,
+  dpFetchSpecsBatch,
   dpResolveContext,
+  dpResolveContextEmbed,
   DP_INTEGRATION_ENABLED,
   fetchBidPackages,
   fetchProjects,
@@ -37,8 +41,20 @@ function readFileText(file) {
 }
 
 export default function ImportPage() {
+  const dpEmbed = useDpEmbedContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const currentStep = searchParams.get('step') === '2' ? '2' : '1'
+
+  const dpSpecsAvailable = Boolean(
+    DP_INTEGRATION_ENABLED &&
+      dpEmbed &&
+      Array.isArray(dpEmbed.projectProductIds) &&
+      dpEmbed.projectProductIds.length > 0
+  )
+
+  const [importSource, setImportSource] = useState('csv')
+  const [dpSpecsVirtualImport, setDpSpecsVirtualImport] = useState(false)
+  const [dpBatchMissingIds, setDpBatchMissingIds] = useState([])
 
   const [importMode, setImportMode] = useState('create_new')
   const [step2View, setStep2View] = useState('existing')
@@ -65,29 +81,67 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (dpSpecsAvailable) {
+      setImportSource('dp_specs')
+    }
+  }, [dpSpecsAvailable])
+
+  useEffect(() => {
     const loadData = async () => {
       setLoadingProjects(true)
       try {
-        if (DP_INTEGRATION_ENABLED) {
+        if (DP_INTEGRATION_ENABLED && dpEmbed) {
+          let projectList = []
+          try {
+            const resolved = await dpResolveContextEmbed({
+              firmId: dpEmbed.firmId,
+              projectId: dpEmbed.projectId
+            })
+            projectList = Array.isArray(resolved) ? resolved : []
+          } catch (_err) {
+            projectList = []
+          }
+          if (projectList.length === 0) {
+            projectList = [
+              {
+                project_id: dpEmbed.projectId,
+                name: dpEmbed.projectName || `Project ${dpEmbed.projectId}`
+              }
+            ]
+          }
+          setProjects(projectList)
+          setSelectedProjectId(String(dpEmbed.projectId))
+          const packageData = await dpFetchProjectBidPackages({ projectId: dpEmbed.projectId })
+          setBidPackages(packageData.bid_packages || [])
+        } else if (DP_INTEGRATION_ENABLED) {
           const urlParams = new URLSearchParams(window.location.search || '')
           const firmId = urlParams.get('firm_id')
           const projectName = urlParams.get('project_name')
           const projectNumber = urlParams.get('project_number')
 
-          if (!firmId || !projectName) {
-            throw new Error('Missing firm_id and/or project_name in URL parameters for DP integration mode')
-          }
-
-          const resolved = await dpResolveContext({ firmId, projectName, projectNumber })
-          const projectList = Array.isArray(resolved) ? resolved : []
-          setProjects(projectList)
-          if (projectList.length > 0) {
-            const dpProjectId = String(projectList[0].project_id)
-            setSelectedProjectId(dpProjectId)
-            const packageData = await dpFetchProjectBidPackages({ projectId: dpProjectId })
-            setBidPackages(packageData.bid_packages || [])
+          if (firmId && projectName) {
+            const resolved = await dpResolveContext({ firmId, projectName, projectNumber })
+            const projectList = Array.isArray(resolved) ? resolved : []
+            setProjects(projectList)
+            if (projectList.length > 0) {
+              const dpProjectId = String(projectList[0].project_id)
+              setSelectedProjectId(dpProjectId)
+              const packageData = await dpFetchProjectBidPackages({ projectId: dpProjectId })
+              setBidPackages(packageData.bid_packages || [])
+            } else {
+              setBidPackages([])
+            }
           } else {
-            setBidPackages([])
+            const [projectData, packageData] = await Promise.all([fetchProjects(), fetchBidPackages()])
+            const projectList = projectData.projects || []
+            const packageList = packageData.bid_packages || []
+
+            setProjects(projectList)
+            setBidPackages(packageList)
+
+            if (projectList.length > 0) {
+              setSelectedProjectId(String(projectList[0].id))
+            }
           }
         } else {
           const [projectData, packageData] = await Promise.all([fetchProjects(), fetchBidPackages()])
@@ -109,7 +163,7 @@ export default function ImportPage() {
     }
 
     loadData()
-  }, [])
+  }, [dpEmbed])
 
   const filteredExistingPackages = useMemo(
     () => {
@@ -138,19 +192,86 @@ export default function ImportPage() {
     [previewResult]
   )
   const canCreate = useMemo(
-    () => importMode === 'create_new' && canPreview && previewResult?.valid && packageName && selectedProjectId,
-    [canPreview, importMode, previewResult, packageName, selectedProjectId]
+    () =>
+      importMode === 'create_new' &&
+      canPreview &&
+      previewResult?.valid &&
+      packageName &&
+      selectedProjectId &&
+      (selectedFile || dpSpecsVirtualImport),
+    [canPreview, importMode, previewResult, packageName, selectedProjectId, selectedFile, dpSpecsVirtualImport]
   )
   const canAddToExisting = useMemo(
-    () => importMode === 'add_existing' && canPreview && previewResult?.valid && selectedExistingPackageId,
-    [canPreview, importMode, previewResult, selectedExistingPackageId]
+    () =>
+      importMode === 'add_existing' &&
+      canPreview &&
+      previewResult?.valid &&
+      selectedExistingPackageId &&
+      (selectedFile || dpSpecsVirtualImport),
+    [canPreview, importMode, previewResult, selectedExistingPackageId, selectedFile, dpSpecsVirtualImport]
   )
+
+  const dpSelectionSummary = useMemo(() => {
+    if (!dpEmbed || !dpSpecsAvailable) return ''
+    const ids = dpEmbed.projectProductIds
+    if (ids.includes('all')) {
+      return 'Using all specs from this bulk action (Designer Pages).'
+    }
+    return `Using ${ids.length} selected spec line(s) from this project.`
+  }, [dpEmbed, dpSpecsAvailable])
+
+  const handleLoadDpSpecs = async () => {
+    if (!DP_INTEGRATION_ENABLED || !dpEmbed || !selectedProjectId) return
+
+    setLoading(true)
+    setStatusMessage('Loading specs from Designer Pages...')
+    setCreateResult(null)
+    setPreviewErrors([])
+
+    try {
+      const batch = await dpFetchSpecsBatch({
+        projectId: selectedProjectId,
+        projectProductIds: dpEmbed.projectProductIds
+      })
+      const items = batch.items || []
+      const missing = batch.missing_ids || batch.missingIds || []
+      setDpBatchMissingIds(Array.isArray(missing) ? missing.map(String) : [])
+
+      const csv = designerPagesCsvFromDpSpecItems(items)
+      if (!csv.trim()) {
+        throw new Error('No spec rows returned for this selection. Try CSV import or adjust your selection in Designer Pages.')
+      }
+
+      setCsvContent(csv)
+      setDpSpecsVirtualImport(true)
+      setSelectedFile(null)
+
+      const result = await previewBidPackage({
+        projectId: selectedProjectId,
+        csvContent: csv,
+        sourceProfile: 'designer_pages'
+      })
+      setPreviewResult(result)
+      setPreviewErrors([])
+      setStatusMessage(`Preview ready: ${result.row_count} rows from Designer Pages.`)
+    } catch (error) {
+      const message = error.message || 'Failed to load specs from Designer Pages'
+      setStatusMessage(message)
+      setPreviewErrors(error.details?.errors || [message])
+      setPreviewResult({ valid: false, row_count: 0, source_profile: 'designer_pages', sample_rows: [] })
+      setDpSpecsVirtualImport(false)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleFilePick = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
 
     setSelectedFile(file)
+    setDpSpecsVirtualImport(false)
+    setDpBatchMissingIds([])
     setCreateResult(null)
     setPreviewResult(null)
     setPreviewErrors([])
@@ -215,16 +336,17 @@ export default function ImportPage() {
   }
 
   const handleCreatePackage = async () => {
-    if (!canCreate || !selectedFile) return
+    if (!canCreate || (!selectedFile && !dpSpecsVirtualImport)) return
 
     setLoading(true)
     setStatusMessage('Creating bid package...')
 
     try {
+      const sourceFilename = selectedFile ? selectedFile.name : 'designer-pages-specs.csv'
       const result = await createBidPackage({
         projectId: selectedProjectId,
         name: packageName,
-        sourceFilename: selectedFile.name,
+        sourceFilename,
         csvContent,
         sourceProfile: 'designer_pages',
         visibility,
@@ -242,15 +364,16 @@ export default function ImportPage() {
   }
 
   const handleAddToExistingPackage = async () => {
-    if (!canAddToExisting || !selectedFile) return
+    if (!canAddToExisting || (!selectedFile && !dpSpecsVirtualImport)) return
 
     setLoading(true)
     setStatusMessage('Adding rows to existing bid package...')
 
     try {
+      const sourceFilename = selectedFile ? selectedFile.name : 'designer-pages-specs.csv'
       const result = await importRowsToBidPackage({
         bidPackageId: selectedExistingPackageId,
-        sourceFilename: selectedFile.name,
+        sourceFilename,
         csvContent,
         sourceProfile: 'designer_pages'
       })
@@ -271,17 +394,77 @@ export default function ImportPage() {
             <div className="import-step2-modal">
               <h3 className="import-step2-title">Import Specs to Bid Package</h3>
 
-              <label className="dropzone">
-                <input type="file" accept=".csv,text/csv" onChange={handleFilePick} style={{ display: 'none' }} />
-                {selectedFile ? `Selected: ${selectedFile.name}` : 'Choose CSV file'}
-              </label>
+              {dpSpecsAvailable ? (
+                <div className="import-source-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`btn ${importSource === 'dp_specs' ? 'btn-primary' : ''}`.trim()}
+                    onClick={() => {
+                      setImportSource('dp_specs')
+                      setStatusMessage('')
+                    }}
+                  >
+                    Use selected specs from project
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${importSource === 'csv' ? 'btn-primary' : ''}`.trim()}
+                    onClick={() => {
+                      setImportSource('csv')
+                      setStatusMessage('')
+                      setDpSpecsVirtualImport(false)
+                      setDpBatchMissingIds([])
+                    }}
+                  >
+                    Import from CSV instead
+                  </button>
+                </div>
+              ) : null}
 
-              <div className="action-row" style={{ marginBottom: '0.75rem' }}>
-                <button className="btn" onClick={handlePreview} disabled={!canPreview || loading}>Preview Products</button>
-                <button className="btn btn-primary" onClick={handleGoToStep2} disabled={!canProceedToStep2 || loading}>
-                  Next
-                </button>
-              </div>
+              {importSource === 'dp_specs' && dpSpecsAvailable ? (
+                <>
+                  {dpSelectionSummary ? (
+                    <p className="text-muted" style={{ marginBottom: '0.75rem' }}>{dpSelectionSummary}</p>
+                  ) : null}
+                  {dpBatchMissingIds.length > 0 ? (
+                    <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
+                      Designer Pages did not return data for {dpBatchMissingIds.length} selected id(s).
+                    </p>
+                  ) : null}
+                  <div className="action-row" style={{ marginBottom: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={handleLoadDpSpecs}
+                      disabled={!selectedProjectId || loading || loadingProjects}
+                    >
+                      Load specs &amp; preview
+                    </button>
+                    <button className="btn btn-primary" onClick={handleGoToStep2} disabled={!canProceedToStep2 || loading}>
+                      Next
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="dropzone">
+                    <input type="file" accept=".csv,text/csv" onChange={handleFilePick} style={{ display: 'none' }} />
+                    {selectedFile ? `Selected: ${selectedFile.name}` : 'Choose CSV file'}
+                  </label>
+                  {dpSpecsVirtualImport && importSource === 'csv' ? (
+                    <p className="text-muted" style={{ marginTop: '0.35rem' }}>
+                      Tip: choosing a CSV file replaces any Designer Pages–based preview.
+                    </p>
+                  ) : null}
+
+                  <div className="action-row" style={{ marginBottom: '0.75rem' }}>
+                    <button className="btn" onClick={handlePreview} disabled={!canPreview || loading}>Preview Products</button>
+                    <button className="btn btn-primary" onClick={handleGoToStep2} disabled={!canProceedToStep2 || loading}>
+                      Next
+                    </button>
+                  </div>
+                </>
+              )}
 
               {statusMessage ? <p className="text-muted">{statusMessage}</p> : null}
               {previewErrors.length > 0 ? (

@@ -3,7 +3,8 @@ module BidCollections
     def self.draw(router)
       router.namespace :api, defaults: { format: :json } do
         # Standalone-mode proxy to DP v2 bid_collections endpoints (browser-safe).
-        router.post 'dp/context', to: 'dp_proxy#context'
+        # POST: firm_id + project_name (+ optional project_number). GET: firm_id + project_id (embed).
+        router.match 'dp/context', to: 'dp_proxy#context', via: [:get, :post]
         router.get 'dp/projects/:project_id/bid_packages', to: 'dp_proxy#bid_packages'
         router.post 'dp/projects/:project_id/bid_packages/:package_id/selection', to: 'dp_proxy#selection'
         router.post 'dp/projects/:project_id/specs/batch', to: 'dp_proxy#specs_batch'

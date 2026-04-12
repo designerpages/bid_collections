@@ -3,6 +3,7 @@ require 'json'
 require 'openssl'
 require 'securerandom'
 require 'cgi'
+require 'uri'
 
 module Dp
   class ApiClient
@@ -27,6 +28,12 @@ module Dp
         project_name: project_name,
         project_number: project_number
       )
+    end
+
+    # Embed / lightbox bootstrap: DP documents GET with firm_id + project_id.
+    def context_resolve_by_project(firm_id:, project_id:)
+      query = URI.encode_www_form('firm_id' => firm_id.to_s, 'project_id' => project_id.to_s)
+      get_json("/api/v2/bid_collections/context?#{query}")
     end
 
     def list_bid_packages(project_id:)

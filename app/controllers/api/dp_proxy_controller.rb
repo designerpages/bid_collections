@@ -7,11 +7,19 @@ module Api
   # - BC -> DP (HMAC-signed)
   class DpProxyController < Api::BaseController
     def context
-      payload = ::Dp::ApiClient.new.context_resolve(
-        firm_id: params.require(:firm_id),
-        project_name: params.require(:project_name),
-        project_number: params[:project_number]
-      )
+      client = ::Dp::ApiClient.new
+      payload = if request.get?
+                  client.context_resolve_by_project(
+                    firm_id: params.require(:firm_id),
+                    project_id: params.require(:project_id)
+                  )
+                else
+                  client.context_resolve(
+                    firm_id: params.require(:firm_id),
+                    project_name: params.require(:project_name),
+                    project_number: params[:project_number]
+                  )
+                end
       render json: payload
     rescue ::Dp::ApiClient::Error => e
       render json: { error: e.message }, status: :bad_gateway
