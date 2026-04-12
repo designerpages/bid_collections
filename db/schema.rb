@@ -12,7 +12,7 @@
 
 ActiveRecord::Schema.define(version: 2026_04_09_121000) do
 
-  create_table "bid_award_events", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_award_events", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.bigint "from_bid_id"
     t.bigint "to_bid_id", null: false
@@ -31,7 +31,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["to_bid_id"], name: "index_bid_award_events_on_to_bid_id"
   end
 
-  create_table "bid_collection_invites", id: :integer, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_collection_invites", id: :integer, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.string "dealer_name", null: false
     t.string "dealer_email"
@@ -48,7 +48,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["token"], name: "index_bid_collection_invites_on_token", unique: true
   end
 
-  create_table "bid_line_items", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_line_items", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_id", null: false
     t.bigint "spec_item_id", null: false
     t.decimal "unit_price", precision: 12, scale: 4
@@ -68,7 +68,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["spec_item_id"], name: "index_bid_line_items_on_spec_item_id"
   end
 
-  create_table "bid_packages", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_packages", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.integer "project_id", null: false
     t.string "name", null: false
     t.string "source_filename", null: false
@@ -89,7 +89,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["public_token"], name: "index_bid_packages_on_public_token", unique: true
   end
 
-  create_table "bid_row_awards", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_row_awards", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.bigint "spec_item_id", null: false
     t.bigint "bid_id", null: false
@@ -105,7 +105,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["spec_item_id"], name: "fk_rails_b452db77af"
   end
 
-  create_table "bid_submission_versions", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bid_submission_versions", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_id", null: false
     t.integer "version_number", null: false
     t.datetime "submitted_at", null: false
@@ -118,7 +118,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["bid_id"], name: "index_bid_submission_versions_on_bid_id"
   end
 
-  create_table "bids", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "bids", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.integer "invite_id", null: false
     t.integer "state", default: 0, null: false
     t.datetime "submitted_at"
@@ -198,7 +198,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["spec_item_id"], name: "index_post_award_uploads_on_spec_item_id"
   end
 
-  create_table "projects", id: :integer, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "projects", id: :integer, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.string "name", null: false
     t.text "description"
     t.datetime "created_at", null: false
@@ -209,7 +209,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["firm_id"], name: "index_projects_on_firm_id"
   end
 
-  create_table "spec_item_approval_components", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "spec_item_approval_components", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.bigint "spec_item_id", null: false
     t.string "label", null: false
@@ -220,7 +220,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["spec_item_id"], name: "index_spec_item_approval_components_on_spec_item_id"
   end
 
-  create_table "spec_item_requirement_approvals", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "spec_item_requirement_approvals", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.bigint "spec_item_id", null: false
     t.string "requirement_key", null: false
@@ -240,7 +240,7 @@ ActiveRecord::Schema.define(version: 2026_04_09_121000) do
     t.index ["spec_item_id"], name: "index_spec_item_requirement_approvals_on_spec_item_id"
   end
 
-  create_table "spec_items", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb3", force: :cascade do |t|
+  create_table "spec_items", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "bid_package_id", null: false
     t.string "spec_item_id", null: false
     t.string "category", null: false

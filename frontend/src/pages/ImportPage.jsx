@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import SectionCard from '../components/SectionCard'
 import { useDpEmbedContext } from '../context/DpEmbedContext'
 import { designerPagesCsvFromDpSpecItems } from '../lib/dpSpecsCsv'
@@ -29,6 +29,18 @@ function createQuestionDraft() {
     id: `question_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     label: ''
   }
+}
+
+function projectRecordId(project) {
+  if (project == null) return ''
+  return String(project.id ?? project.project_id ?? '')
+}
+
+function projectRecordName(project) {
+  if (project == null) return ''
+  const name = project.name ?? project.project_name
+  const id = projectRecordId(project)
+  return (name && String(name).trim()) || `Project ${id || '?'}`
 }
 
 function readFileText(file) {
@@ -164,6 +176,12 @@ export default function ImportPage() {
 
     loadData()
   }, [dpEmbed])
+
+  useEffect(() => {
+    if (loadingProjects || selectedProjectId || projects.length === 0) return
+    const firstId = projectRecordId(projects[0])
+    if (firstId) setSelectedProjectId(firstId)
+  }, [loadingProjects, selectedProjectId, projects])
 
   const filteredExistingPackages = useMemo(
     () => {
@@ -393,6 +411,42 @@ export default function ImportPage() {
           <SectionCard className="section-card-flat">
             <div className="import-step2-modal">
               <h3 className="import-step2-title">Import Specs to Bid Package</h3>
+
+              {loadingProjects ? (
+                <p className="text-muted" style={{ marginBottom: '0.75rem' }}>Loading projects…</p>
+              ) : null}
+
+              {!loadingProjects && !selectedProjectId && projects.length === 0 ? (
+                <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
+                  Preview needs a Bid Collections project (CSV import is scoped to a project).{' '}
+                  <Link to="/projects">Open Projects</Link> and create one — none exist yet.
+                </p>
+              ) : null}
+
+              {!loadingProjects && selectedProjectId && projects.length > 1 ? (
+                <label style={{ display: 'block', marginBottom: '1rem' }}>
+                  <span className="text-muted" style={{ display: 'block', marginBottom: '0.35rem' }}>Bid Collections project</span>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(event) => setSelectedProjectId(event.target.value)}
+                  >
+                    {projects.map((p) => {
+                      const id = projectRecordId(p)
+                      return (
+                        <option key={id} value={id}>
+                          {projectRecordName(p)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+              ) : null}
+
+              {!loadingProjects && selectedProjectId && projects.length === 1 ? (
+                <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
+                  Project: <strong>{projectRecordName(projects[0])}</strong>
+                </p>
+              ) : null}
 
               {dpSpecsAvailable ? (
                 <div className="import-source-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>

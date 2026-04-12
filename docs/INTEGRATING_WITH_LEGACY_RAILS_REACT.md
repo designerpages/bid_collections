@@ -95,7 +95,7 @@ Bid Collections will sign and forward requests to DP’s `/api/v2/bid_collection
 
 #### DP lightbox embed (`BidCollectionsApp`)
 
-Mount the library export `BidCollectionsApp` from `@bid-collections/ui` with `router="memory"`, `basename="/bid_collections"`, `initialPath="/import"`, and optionally `dpEmbedContext={{ projectId, firmId, projectName, projectProductIds }}`. Until the host passes that prop, BC also reads `window.__DP_BID_COLLECTIONS_CONTEXT__` (same shape). When embed context includes `projectProductIds`, Import defaults to **Use selected specs from project** and still offers **Import from CSV instead**. Full-page loads without context keep the previous CSV / BC project behavior when `VITE_DP_INTEGRATION=1` but no embed and no `firm_id` / `project_name` query params.
+Mount the library export `BidCollectionsApp` from `@dpwizards/bid-collections-ui` with `router="memory"`, `basename="/bid_collections"`, `initialPath="/import"`, and optionally `dpEmbedContext={{ projectId, firmId, projectName, projectProductIds }}`. Until the host passes that prop, BC also reads `window.__DP_BID_COLLECTIONS_CONTEXT__` (same shape). When embed context includes `projectProductIds`, Import defaults to **Use selected specs from project** and still offers **Import from CSV instead**. Full-page loads without context keep the previous CSV / BC project behavior when `VITE_DP_INTEGRATION=1` but no embed and no `firm_id` / `project_name` query params.
 
 ### 2) Run the React app from this repository
 

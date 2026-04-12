@@ -1,7 +1,7 @@
 {
-  "name": "@bid-collections/ui",
+  "name": "@dpwizards/bid-collections-ui",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.3",
   "type": "module",
   "engines": {
     "node": "14.x"
@@ -10,8 +10,12 @@
     "dev": "vite",
     "build": "vite build",
     "build:lib": "vite build -c vite.lib.config.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build:lib"
   },
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "exports": {
