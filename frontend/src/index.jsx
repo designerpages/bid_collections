@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react'
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import App from './App'
-import './styles.css'
+import stylesText from './styles.css?inline'
 import { DpEmbedContext, normalizeDpEmbedContext, readWindowDpBidCollectionsContext } from './context/DpEmbedContext'
+import ShadowRoot from './components/ShadowRoot'
 
 function resolveDpEmbedForTree(dpEmbedContext) {
   const fromProp = normalizeDpEmbedContext(dpEmbedContext)
@@ -47,7 +48,11 @@ export function BidCollectionsApp({
       </MemoryRouter>
     )
 
-  return <DpEmbedContext.Provider value={resolvedEmbed}>{routed}</DpEmbedContext.Provider>
+  return (
+    <ShadowRoot stylesText={stylesText}>
+      <DpEmbedContext.Provider value={resolvedEmbed}>{routed}</DpEmbedContext.Provider>
+    </ShadowRoot>
+  )
 }
 
 export { App }

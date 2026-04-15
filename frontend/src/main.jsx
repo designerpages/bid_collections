@@ -2,17 +2,20 @@ import React, { useMemo } from 'react'
 import ReactDOM from 'react-dom'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import './styles.css'
+import stylesText from './styles.css?inline'
 import { DpEmbedContext, readWindowDpBidCollectionsContext } from './context/DpEmbedContext'
+import ShadowRoot from './components/ShadowRoot'
 
 function StandaloneRoot() {
   const embed = useMemo(() => readWindowDpBidCollectionsContext(), [])
   return (
-    <DpEmbedContext.Provider value={embed}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </DpEmbedContext.Provider>
+    <ShadowRoot stylesText={stylesText}>
+      <DpEmbedContext.Provider value={embed}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </DpEmbedContext.Provider>
+    </ShadowRoot>
   )
 }
 
