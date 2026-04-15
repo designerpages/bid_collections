@@ -29,7 +29,7 @@ export default function ShadowRoot({ children, stylesText, mode = 'open' }) {
     return () => {
       try {
         shadowRoot.removeChild(styleEl)
-      } catch {
+      } catch (err) {
         // ignore
       }
     }
