@@ -261,6 +261,12 @@ function approvalsOnlyStorageKey(bidPackageId) {
   return `${DASHBOARD_SKIP_TO_APPROVALS_KEY_PREFIX}${bidPackageId}`
 }
 
+function resolveApprovalsOnlyMode(bidPackageId, packageAwardStatus = 'not_awarded') {
+  if (!bidPackageId) return false
+  if ((packageAwardStatus || 'not_awarded') === 'fully_awarded') return false
+  return loadStoredValue(approvalsOnlyStorageKey(bidPackageId)) === '1'
+}
+
 function packageSettingsStorageKey(bidPackageId) {
   return `${DASHBOARD_PACKAGE_SETTINGS_KEY_PREFIX}${bidPackageId}`
 }
@@ -436,9 +442,10 @@ export default function PackageDashboardPage() {
   const [approvalsOnlyMode, setApprovalsOnlyMode] = useState(() => (
     initialBidPackageId &&
     !initialCachedPackageSettings?.awarded_bid_id &&
-    Array.isArray(initialDashboardSnapshot?.rows) &&
-    initialDashboardSnapshot.rows.length > 0 &&
-    loadStoredValue(approvalsOnlyStorageKey(initialBidPackageId)) === '1'
+    resolveApprovalsOnlyMode(
+      initialBidPackageId,
+      initialCachedPackageSettings?.package_award_status || 'not_awarded'
+    )
   ))
 
   const [selectedVendorKey, setSelectedVendorKey] = useState('')
@@ -604,12 +611,10 @@ export default function PackageDashboardPage() {
       setShowAllAwardedBidders(false)
       setHistoryView(null)
       setHistoryInviteId(null)
-      const isApprovalsOnlyStored = loadStoredValue(approvalsOnlyStorageKey(targetBidPackageId)) === '1'
-      setApprovalsOnlyMode(
-        (bidPackage?.package_award_status || 'not_awarded') !== 'fully_awarded' &&
-        invites.length > 0 &&
-        isApprovalsOnlyStored
-      )
+      setApprovalsOnlyMode(resolveApprovalsOnlyMode(
+        targetBidPackageId,
+        bidPackage?.package_award_status || 'not_awarded'
+      ))
       setStatusMessage('')
     } catch (error) {
       setStatusMessage(error.message)
@@ -1487,13 +1492,14 @@ export default function PackageDashboardPage() {
     if (!activePackageId) return
     const cached = loadCachedPackageSettings(activePackageId)
     const cachedSnapshot = loadCachedDashboardSnapshot(activePackageId)
-    const hasCachedBidders = Array.isArray(cachedSnapshot?.rows) && cachedSnapshot.rows.length > 0
-    const storedApprovalsOnly = loadStoredValue(approvalsOnlyStorageKey(activePackageId)) === '1'
     if (cached?.awarded_bid_id) {
       if (approvalsOnlyMode) setApprovalsOnlyMode(false)
       return
     }
-    setApprovalsOnlyMode(storedApprovalsOnly && hasCachedBidders)
+    setApprovalsOnlyMode(resolveApprovalsOnlyMode(
+      activePackageId,
+      cached?.package_award_status || 'not_awarded'
+    ))
   }, [activePackageId])
 
   useEffect(() => {
